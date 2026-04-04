@@ -1,13 +1,17 @@
 {
-“name”: “cpg-pipeline”,
+“name”: “decipha”,
 “version”: “1.0.0”,
 “description”: “Custom Pixel Graphics — image to code pipeline”,
 “scripts”: {
 “dev”:   “vite”,
 “build”: “tsc && vite build”
 },
+“dependencies”: {
+“three”: “^0.165.0”
+},
 “devDependencies”: {
-“typescript”: “^5.0.0”,
-“vite”:       “^5.0.0”
+“@types/three”: “^0.165.0”,
+“typescript”:   “^5.0.0”,
+“vite”:         “^5.0.0”
 }
 }
