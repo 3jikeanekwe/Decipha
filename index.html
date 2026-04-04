@@ -5,252 +5,488 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CPG Pipeline</title>
+
+  <!--
+    Import map: tells the browser where to find "three" and its addons
+    when meshViewer.ts does  import * as THREE from "three".
+    We use the official Three.js CDN — no npm install needed in the browser.
+    If you are using Vite you can do  npm install three  instead and remove this.
+  -->
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":             "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/":     "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Courier New', monospace;
+      font-family: 'Courier New', Courier, monospace;
       background: #07090f;
       color: #b0c8b8;
-      padding: 24px;
       min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    h1  { color: #00ff88; font-size: 18px; letter-spacing: .1em; margin-bottom: 4px; }
-    p.sub { color: #1d3828; font-size: 11px; margin-bottom: 20px; }
 
-```
-.controls { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end; }
+    header {
+      padding: 14px 20px 10px;
+      border-bottom: 1px solid #0a1a10;
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    header h1  { font-size: 16px; color: #00ff88; letter-spacing: .12em; }
+    header .sub { font-size: 10px; color: #1a3020; letter-spacing: .06em; }
+    #stats { margin-left: auto; font-size: 10px; color: #1d3828; }
+    #stats span { color: #2d5a40; margin-left: 14px; }
 
-label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #2a4a38; }
-label span { color: #1a3020; font-size: 10px; letter-spacing: .08em; }
+    .toolbar {
+      padding: 10px 20px;
+      border-bottom: 1px solid #080f0c;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    label.ctl { display: flex; flex-direction: column; gap: 3px; }
+    label.ctl span { font-size: 9px; color: #1a3020; letter-spacing: .1em; }
 
-input[type=file]   { display: none; }
-.upload-btn, button {
-  padding: 8px 14px;
-  background: transparent;
-  border: 1px solid #0d2018;
-  color: #3a6048;
-  font-family: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  border-radius: 3px;
-  letter-spacing: .05em;
-  transition: border-color .15s, color .15s;
-}
-.upload-btn:hover, button:hover { border-color: #00ff88; color: #00ff88; }
+    input[type=file] { display: none; }
 
-input[type=number] {
-  width: 70px;
-  background: #050a0e;
-  border: 1px solid #0a1a10;
-  color: #7ec8a0;
-  padding: 4px 6px;
-  font-family: inherit;
-  font-size: 11px;
-  border-radius: 3px;
-}
+    button {
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid #0d2018;
+      color: #3a6048;
+      font-family: inherit;
+      font-size: 10px;
+      cursor: pointer;
+      border-radius: 3px;
+      letter-spacing: .05em;
+      transition: border-color .12s, color .12s, background .12s;
+      white-space: nowrap;
+    }
+    button:hover  { border-color: #00ff88; color: #00ff88; }
+    button.active { border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,.06); }
+    button.run    { border-color: #00c8ff; color: #00c8ff; }
+    button.run:hover { background: rgba(0,200,255,.07); }
 
-.stage-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
-.stage-btns button.active { border-color: #00ff88; color: #00ff88; }
+    input[type=number] {
+      width: 64px;
+      background: #050a0e;
+      border: 1px solid #0a1a10;
+      color: #7ec8a0;
+      padding: 4px 6px;
+      font-family: inherit;
+      font-size: 10px;
+      border-radius: 3px;
+    }
 
-.output-area {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-}
+    /* Three-column layout */
+    .main {
+      display: grid;
+      grid-template-columns: 160px 1fr 340px;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+      height: calc(100vh - 110px);
+    }
 
-canvas {
-  border: 1px solid #0a1a10;
-  border-radius: 4px;
-  max-width: 300px;
-  image-rendering: pixelated;
-}
+    /* LEFT sidebar */
+    .sidebar {
+      border-right: 1px solid #080f0c;
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+    }
+    .sidebar-label {
+      font-size: 9px;
+      color: #1a3020;
+      letter-spacing: .12em;
+      margin-top: 4px;
+    }
+    #preview2d {
+      width: 100%;
+      aspect-ratio: 1;
+      border: 1px solid #0a1a10;
+      border-radius: 3px;
+      image-rendering: pixelated;
+      background: #03050a;
+    }
+    .btn-group { display: flex; flex-direction: column; gap: 3px; }
+    .btn-group button { text-align: left; padding: 5px 8px; font-size: 10px; }
 
-textarea {
-  flex: 1;
-  min-width: 260px;
-  height: 420px;
-  background: #03050d;
-  border: 1px solid #091820;
-  color: #5eb880;
-  padding: 10px;
-  font-family: 'Courier New', monospace;
-  font-size: 10px;
-  line-height: 1.5;
-  resize: none;
-  border-radius: 4px;
-  outline: none;
-}
+    /* CENTRE viewport */
+    .viewport {
+      position: relative;
+      background: #07090f;
+      overflow: hidden;
+    }
+    #canvas3d { width: 100%; height: 100%; display: block; }
 
-.stats {
-  font-size: 10px;
-  color: #1a3020;
-  margin-bottom: 10px;
-  letter-spacing: .05em;
-}
-.stats span { color: #2d5a40; margin-right: 16px; }
+    #viewport-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      pointer-events: none;
+    }
+    #viewport-overlay .big-icon { font-size: 48px; color: #0a1a10; }
+    #viewport-overlay .hint { font-size: 11px; color: #0d2018; letter-spacing: .06em; }
+    #viewport-overlay.hidden { display: none; }
 
-.dl-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-```
+    .vp-controls {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .vp-controls button {
+      padding: 4px 8px;
+      font-size: 9px;
+      background: rgba(7,9,15,.75);
+      backdrop-filter: blur(4px);
+    }
+    .vp-hint {
+      font-size: 9px;
+      color: #1a3020;
+      padding: 4px 0;
+    }
 
+    .compass {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      font-size: 9px;
+      color: #1a3020;
+      text-align: right;
+      line-height: 1.8;
+      pointer-events: none;
+    }
+
+    /* RIGHT code panel */
+    .code-panel {
+      border-left: 1px solid #080f0c;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .code-toolbar {
+      padding: 8px 10px;
+      border-bottom: 1px solid #080f0c;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .code-toolbar .label {
+      font-size: 9px;
+      color: #1a3020;
+      letter-spacing: .1em;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #codeOut {
+      flex: 1;
+      background: #03050d;
+      border: none;
+      color: #5eb880;
+      padding: 10px 12px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 9.5px;
+      line-height: 1.55;
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+    }
+
+    @media (max-width: 860px) {
+      .main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 260px auto;
+        height: auto;
+      }
+      .viewport { height: 260px; }
+      .sidebar { flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid #080f0c; }
+      .code-panel { border-left: none; border-top: 1px solid #080f0c; min-height: 240px; }
+    }
   </style>
+
 </head>
 <body>
 
-  <h1>◼ CPG PIPELINE</h1>
-  <p class="sub">IMAGE → CUSTOM PIXEL CODE → EDGE DETECTION → BACKGROUND REMOVAL → 3D MESH</p>
+  <header>
+    <h1>◼ CPG PIPELINE</h1>
+    <span class="sub">IMAGE → CODE → EDGE → BG REMOVE → 3D BROWSER VIEWER</span>
+    <div id="stats">No image loaded.</div>
+  </header>
 
-  <!-- Controls -->
+  <div class="toolbar">
+    <label class="ctl">
+      <span>IMAGE</span>
+      <button onclick="document.getElementById('fileInput').click()">⬆ LOAD IMAGE</button>
+      <input type="file" id="fileInput" accept="image/*" onchange="onFileChange(event)" />
+    </label>
+    <label class="ctl">
+      <span>EDGE THRESHOLD</span>
+      <input type="number" id="edgeThresh" value="30" min="1" max="255" />
+    </label>
+    <label class="ctl">
+      <span>BG THRESHOLD</span>
+      <input type="number" id="bgThresh" value="30" min="1" max="255" />
+    </label>
+    <label class="ctl">
+      <span>Z DEPTH SCALE</span>
+      <input type="number" id="zScale" value="50" min="1" max="400" />
+    </label>
+    <label class="ctl">
+      <span>&nbsp;</span>
+      <button class="run" onclick="runAll()">▶ RUN PIPELINE</button>
+    </label>
+  </div>
 
-  <div class="controls">
+  <div class="main">
 
 ```
-<!-- File picker — clicking the styled button triggers the hidden input -->
-<label>
-  <span>IMAGE</span>
-  <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-    ⬆ LOAD IMAGE
-  </button>
-  <input type="file" id="fileInput" accept="image/*" onchange="onFileChange(event)" />
-</label>
+<!-- LEFT: 2D preview + controls -->
+<div class="sidebar">
 
-<!-- Edge threshold: lower = more edges, higher = fewer, sharper edges only -->
-<label>
-  <span>EDGE THRESHOLD</span>
-  <input type="number" id="edgeThresh" value="30" min="1" max="255" />
-</label>
+  <div class="sidebar-label">2D PREVIEW</div>
+  <canvas id="preview2d" width="140" height="140"></canvas>
 
-<!-- Background threshold: same idea but for the flood-fill wall sensitivity -->
-<label>
-  <span>BG THRESHOLD</span>
-  <input type="number" id="bgThresh" value="30" min="1" max="255" />
-</label>
+  <div class="sidebar-label">STAGE OUTPUT</div>
+  <div class="btn-group">
+    <button onclick="showStage('pixels')"     id="btn-pixels">◼ PIXELS</button>
+    <button onclick="showStage('edges')"      id="btn-edges">∿ EDGES</button>
+    <button onclick="showStage('foreground')" id="btn-foreground">✂ FOREGROUND</button>
+    <button onclick="showStage('mesh')"       id="btn-mesh">⬡ MESH (CPG)</button>
+    <button onclick="showStage('obj')"        id="btn-obj">⬡ MESH (OBJ)</button>
+  </div>
 
-<!-- zScale: how deep the 3D extrusion goes -->
-<label>
-  <span>Z SCALE (3D depth)</span>
-  <input type="number" id="zScale" value="50" min="1" max="300" />
-</label>
+  <div class="sidebar-label">3D COLOUR MODE</div>
+  <div class="btn-group">
+    <button onclick="setColorMode('texture')"   id="cm-texture"   class="active">◈ TEXTURE</button>
+    <button onclick="setColorMode('depth')"     id="cm-depth">◈ DEPTH MAP</button>
+    <button onclick="setColorMode('wireframe')" id="cm-wireframe">◈ WIREFRAME</button>
+    <button onclick="setColorMode('normals')"   id="cm-normals">◈ NORMALS</button>
+  </div>
 
-<!-- Run the whole pipeline once the image is loaded -->
-<label>
-  <span>&nbsp;</span>
-  <button onclick="runAll()">▶ RUN PIPELINE</button>
-</label>
+  <div class="sidebar-label">VIEWER</div>
+  <div class="btn-group">
+    <button onclick="toggleRotate()" id="btn-rotate" class="active">↺ AUTO ROTATE</button>
+    <button onclick="screenshotView()">📷 SCREENSHOT</button>
+  </div>
+
+</div>
+
+<!-- CENTRE: Three.js 3D canvas -->
+<div class="viewport">
+  <canvas id="canvas3d"></canvas>
+
+  <div id="viewport-overlay">
+    <div class="big-icon">⬡</div>
+    <div class="hint">LOAD AN IMAGE AND CLICK ▶ RUN PIPELINE</div>
+    <div class="hint">YOUR 3D MODEL WILL APPEAR HERE</div>
+  </div>
+
+  <div class="vp-controls">
+    <button onclick="resetCamera()">⊙ RESET VIEW</button>
+    <span class="vp-hint">DRAG=ROTATE · SCROLL=ZOOM · RIGHT=PAN</span>
+  </div>
+
+  <div class="compass">X →<br>Y ↑<br>Z ↗</div>
+</div>
+
+<!-- RIGHT: Code output -->
+<div class="code-panel">
+  <div class="code-toolbar">
+    <span class="label" id="codeLabel">// SELECT A STAGE</span>
+    <button onclick="copyCode()">⎘ COPY</button>
+    <button onclick="downloadCurrent()">↓ SAVE</button>
+  </div>
+  <textarea id="codeOut" readonly
+    placeholder="// Run the pipeline to see output here..."></textarea>
+</div>
 ```
 
-  </div>
-
-  <!-- Stage selector — choose which output to show in the textarea -->
-
-  <div class="stage-btns">
-    <button onclick="showStage('pixels')"     id="btn-pixels">PIXELS</button>
-    <button onclick="showStage('edges')"      id="btn-edges">EDGES</button>
-    <button onclick="showStage('foreground')" id="btn-foreground">FOREGROUND</button>
-    <button onclick="showStage('mesh')"       id="btn-mesh">MESH (CPG)</button>
-    <button onclick="showStage('obj')"        id="btn-obj">MESH (OBJ)</button>
-  </div>
-
-  <!-- Stats line -->
-
-  <div class="stats" id="stats">No image loaded.</div>
-
-  <!-- Preview canvas + code output -->
-
-  <div class="output-area">
-    <canvas id="preview" width="300" height="300"></canvas>
-    <div style="flex:1; min-width:260px; display:flex; flex-direction:column;">
-      <textarea id="codeOut" readonly placeholder="// Run the pipeline to see code output here..."></textarea>
-      <div class="dl-row">
-        <button onclick="copyCode()">⎘ COPY</button>
-        <button onclick="downloadCurrent()">↓ DOWNLOAD</button>
-      </div>
-    </div>
-  </div>
-
-  <!--
-    We import the compiled pipeline.
-    After you run `npm run build`, Vite/tsc outputs dist/pipeline.js.
-    Update the src path to match your build output if needed.
-  -->
+  </div><!-- /.main -->
 
   <script type="module">
-    // Import the pipeline function and download utility.
-    // In a Vite project this path resolves automatically.
+
     import { runPipeline, downloadText } from "./src/pipeline.ts";
+    import { MeshViewer }                from "./src/meshViewer.ts";
 
-    let outputs  = {};        // holds all stage code strings
-    let curStage = "pixels"; // which stage is currently shown
-    let img      = null;     // the loaded HTMLImageElement
+    // ── App state ────────────────────────────────────────
+    let viewer   = null;
+    let outputs  = {};
+    let curStage = "mesh";
+    let autoRot  = true;
+    let imgEl    = null;
 
-    // ── File input handler ──
+    const preview2d = document.getElementById("preview2d");
+    const canvas3d  = document.getElementById("canvas3d");
+
+    // ── Boot the viewer immediately on page load ─────────
+    // This creates the WebGL context before any image is loaded
+    // so there's no delay when the user runs the pipeline.
+    viewer = new MeshViewer({
+      canvas:     canvas3d,
+      colorMode:  "texture",
+      autoRotate: true,
+    });
+
+    // Expose to window so the resetCamera button can call it.
+    // (Normally you'd avoid putting internals on window, but this
+    //  keeps the inline onclick handlers simple.)
+    window._viewer = viewer;
+
+
+    // ── File input handler ───────────────────────────────
     window.onFileChange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
 
-      img = new Image();
-      img.onload = () => {
-        // Draw a preview on the canvas immediately.
-        const canvas = document.getElementById("preview");
-        const ctx    = canvas.getContext("2d");
-        canvas.width  = Math.min(img.naturalWidth, 300);
-        canvas.height = Math.min(img.naturalHeight, 300);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      imgEl = new Image();
+      imgEl.onload = () => {
+        // Draw the image into the 2D sidebar preview.
+        const ctx = preview2d.getContext("2d");
+        preview2d.width  = preview2d.clientWidth  || 140;
+        preview2d.height = preview2d.clientHeight || 140;
+        ctx.drawImage(imgEl, 0, 0, preview2d.width, preview2d.height);
 
         document.getElementById("stats").innerHTML =
-          `<span>Image loaded: ${img.naturalWidth}×${img.naturalHeight}px</span>`;
+          `<span>${imgEl.naturalWidth}×${imgEl.naturalHeight}px</span>` +
+          `<span>ready — click ▶ RUN PIPELINE</span>`;
       };
-      img.src = URL.createObjectURL(file);
+      imgEl.src = URL.createObjectURL(file);
     };
 
-    // ── Run the full pipeline ──
+
+    // ── Run all pipeline stages ──────────────────────────
     window.runAll = () => {
-      if (!img) { alert("Load an image first."); return; }
+      if (!imgEl) { alert("Load an image first."); return; }
 
-      const opts = {
-        edgeThreshold:       parseInt(document.getElementById("edgeThresh").value),
-        backgroundThreshold: parseInt(document.getElementById("bgThresh").value),
-        zScale:              parseInt(document.getElementById("zScale").value),
-      };
-
-      // runPipeline does all the work — stages 1 through 4.
-      const result = runPipeline(img, opts);
-      outputs = result.outputs;
-
-      // Update stats line.
-      const s = result.state;
-      const fg = s.pixels.filter(p => p.a > 0).length;
       document.getElementById("stats").innerHTML =
-        `<span>${s.width}×${s.height}px</span>` +
-        `<span>${s.pixels.length.toLocaleString()} pixels</span>` +
-        `<span>${s.edges.length.toLocaleString()} edges</span>` +
-        `<span>${fg.toLocaleString()} foreground</span>` +
-        (s.mesh ? `<span>${s.mesh.triangles.length.toLocaleString()} triangles</span>` : "");
+        `<span>⚙ Processing — this may take a moment for large images…</span>`;
 
-      // Show the current stage.
-      showStage(curStage);
+      // Defer to next frame so the browser repaints the status message.
+      setTimeout(() => {
+
+        const opts = {
+          edgeThreshold:       +document.getElementById("edgeThresh").value,
+          backgroundThreshold: +document.getElementById("bgThresh").value,
+          zScale:              +document.getElementById("zScale").value,
+        };
+
+        const result = runPipeline(imgEl, opts);
+        outputs = result.outputs;
+        const s = result.state;
+
+        // ── Send mesh to the 3D viewer ──
+        if (s.mesh) {
+          viewer.load(s.mesh, preview2d);
+          // Hide the "run pipeline" overlay — the model is now visible.
+          document.getElementById("viewport-overlay").classList.add("hidden");
+        }
+
+        // ── Stats bar ──
+        const fg = s.pixels.filter(p => p.a > 0).length;
+        document.getElementById("stats").innerHTML =
+          `<span>${s.width}×${s.height}px</span>` +
+          `<span>${s.pixels.length.toLocaleString()} pixels</span>` +
+          `<span>${s.edges.length.toLocaleString()} edges</span>` +
+          `<span>${fg.toLocaleString()} foreground</span>` +
+          (s.mesh
+            ? `<span>${s.mesh.triangles.length.toLocaleString()} triangles</span>`
+            : "");
+
+        showStage("mesh");
+
+      }, 30);
     };
 
-    // ── Show a specific stage's output ──
+
+    // ── Stage selector ───────────────────────────────────
+    const STAGES = ["pixels", "edges", "foreground", "mesh", "obj"];
+
     window.showStage = (stage) => {
       curStage = stage;
-      document.getElementById("codeOut").value = outputs[stage] || "// Run the pipeline first.";
+      const code = outputs[stage] ?? "// Run the pipeline first.";
+      document.getElementById("codeOut").value = code;
 
-      // Highlight the active button.
-      ["pixels","edges","foreground","mesh","obj"].forEach(s => {
-        document.getElementById("btn-" + s).classList.toggle("active", s === stage);
-      });
+      const lines = code.split("\n").length;
+      const kb    = (code.length / 1024).toFixed(1);
+      document.getElementById("codeLabel").textContent =
+        `// ${stage.toUpperCase()} — ${lines.toLocaleString()} lines / ${kb} KB`;
+
+      STAGES.forEach(id =>
+        document.getElementById("btn-" + id)
+          .classList.toggle("active", id === stage)
+      );
     };
 
-    // ── Copy to clipboard ──
-    window.copyCode = () => {
-      navigator.clipboard.writeText(document.getElementById("codeOut").value);
+
+    // ── Colour mode ──────────────────────────────────────
+    const COLOR_MODES = ["texture", "depth", "wireframe", "normals"];
+
+    window.setColorMode = (mode) => {
+      viewer.setColorMode(mode);
+      COLOR_MODES.forEach(m =>
+        document.getElementById("cm-" + m)
+          .classList.toggle("active", m === mode)
+      );
     };
 
-    // ── Download the current stage output ──
+
+    // ── Auto-rotate toggle ───────────────────────────────
+    window.toggleRotate = () => {
+      autoRot = !autoRot;
+      viewer.setAutoRotate(autoRot);
+      document.getElementById("btn-rotate")
+        .classList.toggle("active", autoRot);
+    };
+
+
+    // ── Screenshot ───────────────────────────────────────
+    window.screenshotView = () => viewer.screenshot("cpg-model.png");
+
+
+    // ── Reset camera position ────────────────────────────
+    window.resetCamera = () => {
+      viewer.camera.position.set(0, 0, 300);
+      viewer.controls.target.set(0, 0, 0);
+      viewer.controls.update();
+    };
+
+
+    // ── Clipboard copy ───────────────────────────────────
+    window.copyCode = () =>
+      navigator.clipboard.writeText(
+        document.getElementById("codeOut").value
+      );
+
+
+    // ── Download current stage ───────────────────────────
     window.downloadCurrent = () => {
       const ext = curStage === "obj" ? "obj" : "cpg";
-      downloadText(outputs[curStage] || "", `cpg-${curStage}.${ext}`);
+      downloadText(outputs[curStage] ?? "", `cpg-${curStage}.${ext}`);
     };
+
   </script>
 
 </body>
