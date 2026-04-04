@@ -1,0 +1,13 @@
+{
+“name”: “cpg-pipeline”,
+“version”: “1.0.0”,
+“description”: “Custom Pixel Graphics — image to code pipeline”,
+“scripts”: {
+“dev”:   “vite”,
+“build”: “tsc && vite build”
+},
+“devDependencies”: {
+“typescript”: “^5.0.0”,
+“vite”:       “^5.0.0”
+}
+}
