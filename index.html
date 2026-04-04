@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CPG Pipeline — Decipha</title>
+
+  <!--
+    Three.js is loaded from a CDN.
+    No npm, no node_modules, no build step needed.
+    The import map tells the browser that when any <script type="module">
+    does  import * as THREE from "three"  it should fetch from this URL.
+  -->
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":         "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      background: #07090f;
+      color: #b0c8b8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden; /* prevent body scroll — panels scroll internally */
+    }
+
+    /* ── Header bar ── */
+    header {
+      padding: 12px 18px 10px;
+      border-bottom: 1px solid #0a1a10;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+    header h1   { font-size: 15px; color: #00ff88; letter-spacing: .12em; }
+    header .sub { font-size: 10px; color: #1a3020; letter-spacing: .06em; }
+    #stats {
+      margin-left: auto;
+      font-size: 10px;
+      color: #1d3828;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    #stats b { color: #2d5a40; font-weight: normal; }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      padding: 8px 18px;
+      border-bottom: 1px solid #080f0c;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    .ctl       { display: flex; flex-direction: column; gap: 3px; }
+    .ctl span  { font-size: 9px; color: #1a3020; letter-spacing: .1em; }
+
+    /* ── Shared button style ── */
+    button {
+      padding: 6px 11px;
+      background: transparent;
+      border: 1px solid #0d2018;
+      color: #3a6048;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10px;
+      cursor: pointer;
+      border-radius: 3px;
+      letter-spacing: .05em;
+      transition: border-color .12s, color .12s, background .12s;
+      white-space: nowrap;
+    }
+    button:hover          { border-color: #00ff88; color: #00ff88; }
+    button.active         { border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,.06); }
+    button.run            { border-color: #00c8ff; color: #007888; }
+    button.run:hover      { color: #00c8ff; background: rgba(0,200,255,.05); }
+
+    /* ── Number inputs ── */
+    input[type=number] {
+      width: 62px;
+      background: #050a0e;
+      border: 1px solid #0a1a10;
+      color: #7ec8a0;
+      padding: 4px 6px;
+      font-family: inherit;
+      font-size: 10px;
+      border-radius: 3px;
+      outline: none;
+    }
+    /* hide file input — we use a styled button instead */
+    #fileInput { display: none; }
+
+    /* ── Main three-column grid ── */
+    .main {
+      display: grid;
+      grid-template-columns: 155px 1fr 330px;
+      flex: 1;
+      min-height: 0;           /* allows children to shrink inside flex */
+      overflow: hidden;
+    }
+
+    /* ── LEFT sidebar ── */
+    .sidebar {
+      border-right: 1px solid #080f0c;
+      padding: 10px 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      overflow-y: auto;
+    }
+    .s-label {
+      font-size: 9px;
+      color: #1a3020;
+      letter-spacing: .12em;
+      margin-top: 2px;
+    }
+
+    /* 2D image preview in the sidebar */
+    #preview2d {
+      width: 100%;
+      aspect-ratio: 1;
+      border: 1px solid #0a1a10;
+      border-radius: 3px;
+      background: #03050a;
+      image-rendering: pixelated; /* keep pixel art crisp, no blurring */
+    }
+
+    /* stacked button groups in the sidebar */
+    .bgroup { display: flex; flex-direction: column; gap: 3px; }
+    .bgroup button { text-align: left; padding: 5px 8px; }
+
+    /* ── CENTRE — Three.js viewport ── */
+    .viewport {
+      position: relative;
+      background: #05070d;
+      overflow: hidden;
+    }
+
+    /* The canvas fills the viewport div entirely via CSS */
+    #canvas3d { width: 100%; height: 100%; display: block; }
+
+    /* Overlay shown before first pipeline run */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      pointer-events: none;  /* don't block mouse events on the canvas */
+    }
+    #overlay .ico  { font-size: 50px; color: #0a1910; }
+    #overlay .hint { font-size: 11px; color: #0c1d12; letter-spacing: .06em; }
+    #overlay.gone  { display: none; }
+
+    /* Controls pinned to the bottom-left of the viewport */
+    .vp-bar {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .vp-bar button {
+      font-size: 9px;
+      padding: 4px 8px;
+      background: rgba(5,7,13,.8);
+      backdrop-filter: blur(4px);
+    }
+    .vp-bar .tip {
+      font-size: 9px;
+      color: #172818;
+      pointer-events: none;
+    }
+
+    /* Axis label pinned to top-right */
+    .compass {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      font-size: 9px;
+      color: #172818;
+      line-height: 1.9;
+      pointer-events: none;
+      text-align: right;
+    }
+
+    /* ── RIGHT — code output panel ── */
+    .code-panel {
+      border-left: 1px solid #080f0c;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .code-bar {
+      padding: 7px 9px;
+      border-bottom: 1px solid #080f0c;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .code-bar .lbl {
+      font-size: 9px;
+      color: #1a3020;
+      letter-spacing: .08em;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #codeOut {
+      flex: 1;
+      background: #03050d;
+      border: none;
+      color: #5eb880;
+      padding: 10px 11px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 9.5px;
+      line-height: 1.55;
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+    }
+
+    /* ── Responsive — single column on small screens ── */
+    @media (max-width: 820px) {
+      body { overflow: auto; }
+      .main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 280px auto;
+      }
+      .viewport      { height: 280px; }
+      .sidebar       { flex-direction: row; flex-wrap: wrap;
+                        border-right: none; border-bottom: 1px solid #080f0c; }
+      .code-panel    { border-left: none; border-top: 1px solid #080f0c;
+                        min-height: 260px; }
+    }
+  </style>
+
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     HEADER
+══════════════════════════════════════════ -->
+
+<header>
+  <h1>◼ CPG PIPELINE</h1>
+  <span class="sub">IMAGE → CODE → EDGES → BG REMOVE → 3D BROWSER</span>
+  <div id="stats"><b>no image loaded</b></div>
+</header>
+
+<!-- ══════════════════════════════════════════
+     TOOLBAR
+══════════════════════════════════════════ -->
+
+<div class="toolbar">
+
+  <!-- Hidden real file input; the button below triggers it -->
+
+  <input type="file" id="fileInput" accept="image/*" />
+
+  <div class="ctl">
+    <span>IMAGE</span>
+    <!-- onclick triggers the hidden file input -->
+    <button onclick="document.getElementById('fileInput').click()">⬆ LOAD IMAGE</button>
+  </div>
+
+  <!-- Lower = more edges detected (noisier), higher = fewer, stronger edges only -->
+
+  <div class="ctl">
+    <span>EDGE THRESHOLD</span>
+    <input type="number" id="edgeThresh" value="30" min="1" max="255" />
+  </div>
+
+  <!-- Controls how strong an edge must be to block background flood-fill -->
+
+  <div class="ctl">
+    <span>BG THRESHOLD</span>
+    <input type="number" id="bgThresh" value="30" min="1" max="255" />
+  </div>
+
+  <!-- How tall the 3D depth extrusion is — larger = more dramatic relief -->
+
+  <div class="ctl">
+    <span>Z DEPTH SCALE</span>
+    <input type="number" id="zScale" value="50" min="1" max="400" />
+  </div>
+
+  <div class="ctl">
+    <span>&nbsp;</span>
+    <button class="run" onclick="runPipeline()">▶ RUN PIPELINE</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MAIN LAYOUT
+══════════════════════════════════════════ -->
+
+<div class="main">
+
+  <!-- ── LEFT sidebar ── -->
+
+  <div class="sidebar">
+
+```
+<div class="s-label">2D PREVIEW</div>
+<!-- Small preview of the loaded image / processed result -->
+<canvas id="preview2d"></canvas>
+
+<div class="s-label">STAGE OUTPUT</div>
+<div class="bgroup">
+  <button id="btn-pixels"     onclick="showStage('pixels')">◼ PIXELS</button>
+  <button id="btn-edges"      onclick="showStage('edges')">∿ EDGES</button>
+  <button id="btn-foreground" onclick="showStage('foreground')">✂ FOREGROUND</button>
+  <button id="btn-mesh"       onclick="showStage('mesh')">⬡ MESH (CPG)</button>
+  <button id="btn-obj"        onclick="showStage('obj')">⬡ MESH (OBJ)</button>
+</div>
+
+<div class="s-label">3D COLOUR MODE</div>
+<div class="bgroup">
+  <!-- Each button swaps how the 3D mesh is coloured -->
+  <button id="cm-texture"   class="active" onclick="setColorMode('texture')">◈ TEXTURE</button>
+  <button id="cm-depth"                    onclick="setColorMode('depth')">◈ DEPTH MAP</button>
+  <button id="cm-wireframe"                onclick="setColorMode('wireframe')">◈ WIREFRAME</button>
+  <button id="cm-normals"                  onclick="setColorMode('normals')">◈ NORMALS</button>
+</div>
+
+<div class="s-label">VIEWER</div>
+<div class="bgroup">
+  <button id="btn-rotate" class="active" onclick="toggleRotate()">↺ AUTO ROTATE</button>
+  <button onclick="takeScreenshot()">📷 SCREENSHOT</button>
+</div>
+```
+
+  </div><!-- /.sidebar -->
+
+  <!-- ── CENTRE Three.js 3D viewport ── -->
+
+  <div class="viewport">
+    <canvas id="canvas3d"></canvas>
+
+```
+<!-- Shown until the pipeline runs for the first time -->
+<div id="overlay">
+  <div class="ico">⬡</div>
+  <div class="hint">LOAD AN IMAGE THEN CLICK ▶ RUN PIPELINE</div>
+  <div class="hint">YOUR 3D MODEL WILL APPEAR HERE</div>
+</div>
+
+<!-- Buttons pinned inside the viewport -->
+<div class="vp-bar">
+  <button onclick="resetCamera()">⊙ RESET VIEW</button>
+  <span class="tip">DRAG=ROTATE · SCROLL=ZOOM · RIGHT=PAN</span>
+</div>
+
+<div class="compass">X →<br>Y ↑<br>Z ↗</div>
+```
+
+  </div><!-- /.viewport -->
+
+  <!-- ── RIGHT code output ── -->
+
+  <div class="code-panel">
+    <div class="code-bar">
+      <span class="lbl" id="codeLabel">// select a stage</span>
+      <button onclick="copyCode()">⎘ COPY</button>
+      <button onclick="downloadCode()">↓ SAVE</button>
+    </div>
+    <textarea id="codeOut" readonly
+      placeholder="// Run the pipeline to see output here..."></textarea>
+  </div>
+
+</div><!-- /.main -->
+
+<!-- ══════════════════════════════════════════
+     ALL JAVASCRIPT — one self-contained module
+     No build step. No compiler. Runs directly.
+══════════════════════════════════════════ -->
+
+<script type="module">
+
+// ─── Three.js imports from CDN (via the import map above) ───────────────────
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION 1 — PIXEL READER
+// Read every pixel out of the image into our own data format.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * readPixels
+ * Draws the image onto an off-screen canvas then reads every pixel's
+ * RGBA values out of the raw byte buffer the browser provides.
+ *
+ * Returns an object with:
+ *   width, height — image dimensions in pixels
+ *   pixels        — flat array of { x, y, r, g, b, a } objects
+ */
+function readPixels(img) {
+
+  // Create a canvas in memory — never shown on screen.
+  const canvas = document.createElement("canvas");
+  canvas.width  = img.naturalWidth;   // use actual pixel size, not CSS size
+  canvas.height = img.naturalHeight;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0); // draw the image at (0,0) with no scaling
+
+  // getImageData returns a flat Uint8ClampedArray:
+  //   [R, G, B, A,  R, G, B, A,  ...]  — 4 bytes per pixel, left→right, top→bottom
+  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  const pixels = [];
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+
+      // Each pixel occupies 4 consecutive bytes.
+      // Pixel at (x, y) starts at byte index: (y * width + x) * 4
+      const i = (y * width + x) * 4;
+
+      pixels.push({
+        x,
+        y,
+        r: data[i],       // red   0–255
+        g: data[i + 1],   // green 0–255
+        b: data[i + 2],   // blue  0–255
+        a: data[i + 3],   // alpha 0=transparent, 255=opaque
+      });
+    }
+  }
+
+  return { width, height, pixels };
+}
+
+/**
+ * pixelsToCode
+ * Converts the pixel array into your custom CPG text format.
+ * One line per pixel:  P  x  y  rgb(r,g,b)  a:alpha
+ */
+function pixelsToCode(width, height, pixels) {
+  const lines = [
+    `// CPG (Custom Pixel Graphics) v1.0`,
+    `// Generated: ${new Date().toISOString()}`,
+    `META width:${width} height:${height} pixels:${pixels.length}`,
+    ``,
+  ];
+
+  for (const p of pixels) {
+    // padStart pads numbers with spaces so columns align visually
+    lines.push(
+      `P ${String(p.x).padStart(4)}  ${String(p.y).padStart(4)}` +
+      `  rgb(${p.r},${p.g},${p.b})  a:${p.a}`
+    );
+  }
+
+  return lines.join("\n");
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION 2 — EDGE DETECTION  (Sobel operator)
+// For each pixel, compare its brightness to surrounding pixels.
+// Where brightness changes sharply → that's an edge.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * lum — perceived brightness of an RGB colour, normalised 0–255.
+ * The weights match how the human eye perceives colour brightness:
+ * green contributes the most, blue the least.
+ */
+function lum(r, g, b) {
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/**
+ * detectEdges
+ * Runs the Sobel filter over every pixel.
+ *
+ * The Sobel filter uses two 3×3 kernels to measure how much the
+ * brightness changes in the horizontal (Gx) and vertical (Gy) direction.
+ *
+ * Horizontal kernel (finds vertical edges):
+ *   [ -1,  0, +1 ]
+ *   [ -2,  0, +2 ]
+ *   [ -1,  0, +1 ]
+ *
+ * Vertical kernel (finds horizontal edges):
+ *   [ -1, -2, -1 ]
+ *   [  0,  0,  0 ]
+ *   [ +1, +2, +1 ]
+ *
+ * magnitude = √(Gx² + Gy²)  — how strong is the edge here?
+ * angle     = atan2(Gy, Gx) — which direction does the edge run?
+ *
+ * Only pixels where magnitude > threshold are kept as edges.
+ */
+function detectEdges(pixels, width, height, threshold) {
+
+  // Build a flat lookup array indexed by (y * width + x).
+  // Storing just the luminance value is enough for Sobel.
+  const grid = new Float32Array(width * height);
+  for (const p of pixels) {
+    grid[p.y * width + p.x] = lum(p.r, p.g, p.b);
+  }
+
+  // Helper: get brightness at (x, y), returning 0 for out-of-bounds pixels.
+  const g = (x, y) => {
+    if (x < 0 || x >= width || y < 0 || y >= height) return 0;
+    return grid[y * width + x];
+  };
+
+  const edges = [];
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+
+      // Apply the horizontal Sobel kernel — detects vertical edges.
+      const gx =
+        -1 * g(x-1, y-1) + 0 * g(x, y-1) + 1 * g(x+1, y-1) +
+        -2 * g(x-1, y)   + 0 * g(x, y)   + 2 * g(x+1, y)   +
+        -1 * g(x-1, y+1) + 0 * g(x, y+1) + 1 * g(x+1, y+1);
+
+      // Apply the vertical Sobel kernel — detects horizontal edges.
+      const gy =
+        -1 * g(x-1, y-1) + -2 * g(x, y-1) + -1 * g(x+1, y-1) +
+         0 * g(x-1, y)   +  0 * g(x, y)   +  0 * g(x+1, y)   +
+         1 * g(x-1, y+1) +  2 * g(x, y+1) +  1 * g(x+1, y+1);
+
+      // Combine: Pythagorean theorem gives total edge strength.
+      const magnitude = Math.sqrt(gx * gx + gy * gy);
+
+      // Only store this pixel if its edge is strong enough.
+      if (magnitude > threshold) {
+        // atan2 gives the angle in radians: which way does the edge run?
+        const angle = Math.atan2(gy, gx);
+        edges.push({ x, y, magnitude, angle });
+      }
+    }
+  }
+
+  return edges;
+}
+
+/**
+ * edgesToCode — serialise edges into CPG text format.
+ * Each line: E  x  y  mag:value  angle:degrees°  →direction
+ */
+function edgesToCode(edges, width, height) {
+  const lines = [
+    `// CPG Edge Map v1.0`,
+    `META width:${width} height:${height} edgeCount:${edges.length}`,
+    ``,
+  ];
+
+  for (const e of edges) {
+    // Convert radians to degrees (0–360) for readability.
+    const deg = ((e.angle * 180 / Math.PI) + 360) % 360;
+
+    // A simple arrow character shows the edge direction at a glance.
+    const arrow = deg < 45 ? "→" : deg < 135 ? "↓" : deg < 225 ? "←" : deg < 315 ? "↑" : "→";
+
+    lines.push(
+      `E ${String(e.x).padStart(4)}  ${String(e.y).padStart(4)}` +
+      `  mag:${e.magnitude.toFixed(2).padStart(7)}` +
+      `  angle:${deg.toFixed(1).padStart(6)}°  ${arrow}`
+    );
+  }
+
+  return lines.join("\n");
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION 3 — BACKGROUND REMOVAL  (flood fill)
+// Start at every border pixel and spread inward.
+// Stop when you hit an edge — those are the "walls".
+// Everything reached = background → make transparent (alpha = 0).
+// Everything not reached = subject → keep it.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * removeBackground
+ * Returns a new pixels array with background pixels set to alpha = 0.
+ */
+function removeBackground(pixels, edges, width, height, threshold) {
+
+  // Build a Set of "x,y" strings for fast O(1) edge lookup.
+  const edgeSet = new Set();
+  for (const e of edges) {
+    if (e.magnitude > threshold) edgeSet.add(`${e.x},${e.y}`);
+  }
+
+  // Copy the alpha values into a Map so we can modify them.
+  const alpha = new Map();
+  for (const p of pixels) alpha.set(`${p.x},${p.y}`, p.a);
+
+  // ── Breadth-first flood fill ──
+  // We use an array as a queue (shift() removes from the front).
+  // Start by seeding ALL border pixels into the queue.
+  const visited = new Set();
+  const queue   = [];
+
+  // Top and bottom rows:
+  for (let x = 0; x < width; x++) {
+    queue.push([x, 0]);              // top row
+    queue.push([x, height - 1]);    // bottom row
+    visited.add(`${x},0`);
+    visited.add(`${x},${height-1}`);
+  }
+  // Left and right columns (skip corners already added):
+  for (let y = 1; y < height - 1; y++) {
+    queue.push([0, y]);              // left column
+    queue.push([width - 1, y]);     // right column
+    visited.add(`0,${y}`);
+    visited.add(`${width-1},${y}`);
+  }
+
+  // Process every queued pixel.
+  while (queue.length > 0) {
+    const [x, y] = queue.shift(); // take from the front
+    const key    = `${x},${y}`;
+
+    // If this pixel is an edge, it's a wall — don't cross it.
+    if (edgeSet.has(key)) continue;
+
+    // Reachable from the border → background → erase it.
+    alpha.set(key, 0);
+
+    // Check the 4 direct neighbours (up, down, left, right).
+    // We deliberately avoid diagonals to prevent leaking around corners.
+    const neighbours = [[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+    for (const [nx, ny] of neighbours) {
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+      const nk = `${nx},${ny}`;
+      if (!visited.has(nk)) {
+        visited.add(nk);
+        queue.push([nx, ny]);
+      }
+    }
+  }
+
+  // Rebuild the pixels array with updated alpha values.
+  return pixels.map(p => ({ ...p, a: alpha.get(`${p.x},${p.y}`) ?? p.a }));
+}
+
+/**
+ * foregroundToCode — serialise only the non-background pixels.
+ */
+function foregroundToCode(pixels, width, height) {
+  const fg = pixels.filter(p => p.a > 0);
+  const lines = [
+    `// CPG Foreground v1.0`,
+    `META width:${width} height:${height} foregroundPixels:${fg.length}`,
+    ``,
+  ];
+  for (const p of fg) {
+    lines.push(
+      `P ${String(p.x).padStart(4)}  ${String(p.y).padStart(4)}` +
+      `  rgb(${p.r},${p.g},${p.b})  a:${p.a}`
+    );
+  }
+  return lines.join("\n");
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION 4 — DEPTH MAP + 3D MESH
+// Assign a Z value (depth) to each pixel, then connect pixels into triangles.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * buildDepthAndMesh
+ *
+ * DEPTH formula per pixel:
+ *   Z = (luminance × 0.6) + ((1 - edgeStrength) × 0.4)
+ *
+ *   Bright pixels → assumed to be facing the light → closer (high Z).
+ *   Pixels near strong edges → assumed to be on the rim → lower Z.
+ *   The weights 0.6 / 0.4 are tunable — change them for different images.
+ *
+ * MESH: for every pixel that has a right neighbour and a bottom neighbour,
+ * we create 2 triangles:
+ *
+ *   A ── B       Triangle 1: A, B, C
+ *   │  ╲ │       Triangle 2: B, D, C
+ *   C ── D
+ *
+ * This covers the whole image surface with no gaps.
+ *
+ * zScale: multiplies the Z value so depth differences are large enough
+ * to see in the 3D view. Increase it for more dramatic relief.
+ */
+function buildDepthAndMesh(pixels, edges, width, height, zScale) {
+
+  // ── Normalise edge magnitudes to 0–1 ──
+  let maxMag = 0;
+  for (const e of edges) if (e.magnitude > maxMag) maxMag = e.magnitude;
+
+  // Build a flat lookup for edge strength at each position.
+  const edgeMag = new Float32Array(width * height); // default 0
+  for (const e of edges) {
+    edgeMag[e.y * width + e.x] = e.magnitude / (maxMag || 1);
+  }
+
+  // ── Assign Z to every pixel ──
+  const depthPixels = pixels.map(p => {
+    if (p.a === 0) return { ...p, z: 0 }; // background → Z 0
+
+    const brightness  = lum(p.r, p.g, p.b) / 255; // 0–1
+    const edgeStrength = edgeMag[p.y * width + p.x]; // 0–1
+    const edgeInverse  = 1 - edgeStrength; // strong edge → lower Z
+
+    return { ...p, z: brightness * 0.6 + edgeInverse * 0.4 };
+  });
+
+  // ── Build an index map: "x,y" → array index ──
+  // We need this to look up the index of a neighbouring pixel when
+  // building triangle face references.
+  const indexMap = new Map();
+  depthPixels.forEach((p, i) => indexMap.set(`${p.x},${p.y}`, i));
+
+  // ── Create the vertex (point) list ──
+  const points = depthPixels.map(p => ({
+    x: p.x,
+    y: p.y,
+    z: p.z * zScale,  // scale Z so depth is visible in the 3D viewer
+    r: p.r,
+    g: p.g,
+    b: p.b,
+    a: p.a,
+  }));
+
+  // ── Create the triangle list ──
+  const triangles = [];
+
+  for (let y = 0; y < height - 1; y++) {
+    for (let x = 0; x < width - 1; x++) {
+
+      // Indices of the four corners of this cell.
+      const iA = indexMap.get(`${x},${y}`);           // top-left
+      const iB = indexMap.get(`${x + 1},${y}`);       // top-right
+      const iC = indexMap.get(`${x},${y + 1}`);       // bottom-left
+      const iD = indexMap.get(`${x + 1},${y + 1}`);   // bottom-right
+
+      // Skip if any corner is missing.
+      if (iA === undefined || iB === undefined ||
+          iC === undefined || iD === undefined) continue;
+
+      // Skip cells where every corner is transparent (pure background).
+      if (points[iA].a === 0 && points[iB].a === 0 &&
+          points[iC].a === 0 && points[iD].a === 0) continue;
+
+      triangles.push({ a: iA, b: iB, c: iC }); // upper triangle
+      triangles.push({ a: iB, b: iD, c: iC }); // lower triangle
+    }
+  }
+
+  return { points, triangles };
+}
+
+/**
+ * meshToCode — CPG mesh format.
+ * V lines = vertices, T lines = triangles.
+ */
+function meshToCode(points, triangles) {
+  const lines = [
+    `// CPG Mesh v1.0`,
+    `META vertices:${points.length} triangles:${triangles.length}`,
+    ``,
+  ];
+
+  points.forEach((p, i) => {
+    lines.push(
+      `V ${String(i).padStart(6)}` +
+      `  x:${p.x.toFixed(1).padStart(7)}` +
+      `  y:${p.y.toFixed(1).padStart(7)}` +
+      `  z:${p.z.toFixed(2).padStart(7)}` +
+      `  rgb(${p.r},${p.g},${p.b})`
+    );
+  });
+
+  lines.push("");
+
+  for (const t of triangles) {
+    lines.push(
+      `T  a:${String(t.a).padStart(6)}` +
+      `  b:${String(t.b).padStart(6)}` +
+      `  c:${String(t.c).padStart(6)}`
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * meshToOBJ — standard Wavefront OBJ format.
+ * Can be opened in Blender if the user wants to take it further.
+ */
+function meshToOBJ(points, triangles) {
+  const lines = [
+    `# CPG Pipeline — OBJ Export`,
+    `# Vertices: ${points.length}  Triangles: ${triangles.length}`,
+    ``,
+  ];
+
+  // "v x y z" — vertex positions. Negate Y because OBJ is Y-up.
+  for (const p of points) {
+    lines.push(`v ${p.x.toFixed(4)} ${(-p.y).toFixed(4)} ${p.z.toFixed(4)}`);
+  }
+
+  lines.push("");
+
+  // "f a b c" — face indices. OBJ starts at 1, not 0.
+  for (const t of triangles) {
+    lines.push(`f ${t.a + 1} ${t.b + 1} ${t.c + 1}`);
+  }
+
+  return lines.join("\n");
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION 5 — THREE.JS 3D VIEWER
+// Takes the mesh (points + triangles) and renders it live in the browser.
+// Users can rotate, zoom, and pan with the mouse or touch — no downloads.
+// ════════════════════════════════════════════════════════════════════════════
+
+const canvas3d = document.getElementById("canvas3d");
+
+// ── Renderer ──
+// WebGLRenderer uses the GPU. antialias smooths diagonal edges.
+const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio); // sharp on high-DPI screens
+renderer.setClearColor(0x07090f, 1);             // dark background colour
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+
+// ── Scene ──
+// The Scene is the root container — all objects, lights, etc. go in here.
+const scene = new THREE.Scene();
+
+// Fog makes far parts of the mesh fade out — adds depth perception.
+scene.fog = new THREE.FogExp2(0x07090f, 0.002);
+
+// ── Camera ──
+// PerspectiveCamera mimics how eyes work.
+// 75 = field of view degrees, 0.1 & 5000 = near/far clipping planes.
+const camera = new THREE.PerspectiveCamera(
+  75,
+  canvas3d.clientWidth / canvas3d.clientHeight,
+  0.1,
+  5000
+);
+camera.position.set(0, 0, 300); // start position: in front of the scene
+
+// ── Lights ──
+// Without lights, a MeshStandardMaterial would be black.
+
+// AmbientLight fills everything evenly — no shadows, just base brightness.
+const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambient);
+
+// DirectionalLight acts like the sun — parallel rays, casts shadows.
+const sun = new THREE.DirectionalLight(0xfff0e0, 1.2);
+sun.position.set(200, 400, 300);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024); // shadow map resolution
+scene.add(sun);
+
+// A second dim fill light from the opposite side adds subtle rim lighting.
+const fill = new THREE.DirectionalLight(0x8090ff, 0.3);
+fill.position.set(-200, -100, -200);
+scene.add(fill);
+
+// ── Grid helper ──
+// Shows a ground plane for spatial context.
+const grid = new THREE.GridHelper(600, 40, 0x0d2018, 0x0a1a10);
+grid.position.y = -80;
+scene.add(grid);
+
+// ── OrbitControls ──
+// Handles all mouse/touch input for rotating, zooming and panning.
+// We attach it to the canvas element so it captures events there.
+const controls = new OrbitControls(camera, canvas3d);
+controls.enableDamping  = true;  // smooth inertia when you let go
+controls.dampingFactor  = 0.08;
+controls.autoRotate     = true;
+controls.autoRotateSpeed = 0.6; // degrees per animation frame
+
+// ── Resize handling ──
+// Keeps the camera and renderer in sync when the window resizes.
+new ResizeObserver(() => {
+  const w = canvas3d.clientWidth;
+  const h = canvas3d.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix(); // must call this after changing aspect
+  renderer.setSize(w, h, false);   // false = don't set CSS style, just internal resolution
+}).observe(canvas3d);
+
+// ── Render loop ──
+// requestAnimationFrame calls this ~60 times per second, synced to the screen.
+// It automatically pauses when the browser tab is hidden.
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update(); // required every frame for damping + auto-rotate
+  renderer.render(scene, camera);
+}
+animate(); // start the loop immediately
+
+// Current mesh group in the scene (we'll replace it on each pipeline run).
+let meshGroup = null;
+
+// Current colour mode — changes how vertices are coloured.
+let colorMode = "texture";
+
+// The last mesh data, kept so we can re-colour without re-running the pipeline.
+let lastPoints    = null;
+let lastTriangles = null;
+
+/**
+ * loadMesh
+ * Builds Three.js geometry from our points + triangles arrays and
+ * adds it to the scene.
+ */
+function loadMesh(points, triangles, mode) {
+
+  // Remove and dispose of the previous mesh to free GPU memory.
+  if (meshGroup) {
+    scene.remove(meshGroup);
+    meshGroup.traverse(obj => {
+      if (obj.isMesh) {
+        obj.geometry.dispose();
+        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+  }
+
+  // ── Find bounding box to centre the mesh ──
+  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity,
+      minZ=Infinity, maxZ=-Infinity;
+
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;  if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;  if (p.y > maxY) maxY = p.y;
+    if (p.z < minZ) minZ = p.z;  if (p.z > maxZ) maxZ = p.z;
+  }
+
+  const cx = (minX + maxX) / 2; // centre X
+  const cy = (minY + maxY) / 2; // centre Y
+  const cz = (minZ + maxZ) / 2; // centre Z
+
+  // Scale so the mesh is always about 200 units wide regardless of image size.
+  const span  = Math.max(maxX - minX, maxY - minY);
+  const scale = span > 0 ? 200 / span : 1;
+
+  const zRange = maxZ - minZ || 1; // used for depth colour mode below
+
+  // ── Allocate typed arrays for the GPU ──
+  // Three.js BufferGeometry uses flat typed arrays sent directly to WebGL.
+  // Each vertex has 3 floats for position and 3 floats for colour.
+  const positions = new Float32Array(points.length * 3);
+  const colors    = new Float32Array(points.length * 3);
+  const indices   = new Uint32Array(triangles.length * 3);
+
+  // ── Fill position and colour arrays ──
+  points.forEach((p, i) => {
+
+    // Centre and scale the coordinates.
+    // Negate Y because images count Y downward but 3D counts Y upward.
+    positions[i*3]     = (p.x - cx) * scale;
+    positions[i*3 + 1] = -(p.y - cy) * scale; // flip Y axis
+    positions[i*3 + 2] = (p.z - cz) * scale;
+
+    // Colour depends on the selected mode.
+    let r, g, b;
+
+    if (mode === "texture" || mode === "wireframe") {
+      // Original pixel colour, scaled from 0–255 to 0–1 (WebGL range).
+      r = p.r / 255;
+      g = p.g / 255;
+      b = p.b / 255;
+
+    } else if (mode === "depth") {
+      // Heatmap: blue (far/low Z) → green → red (close/high Z).
+      const t = (p.z - minZ) / zRange; // 0 = far, 1 = close
+      r = Math.min(1, t * 2);               // red ramps up in the second half
+      g = Math.min(1, t < 0.5 ? t*2 : 2-t*2); // green peaks at mid
+      b = Math.max(0, 1 - t * 2);           // blue in the first half only
+
+    } else { // "normals" — rainbow cycle for a colourful iridescent look
+      const h = (i / points.length) * 360;
+      [r, g, b] = hslToRgb(h, 0.8, 0.6);
+    }
+
+    colors[i*3]     = r;
+    colors[i*3 + 1] = g;
+    colors[i*3 + 2] = b;
+  });
+
+  // ── Fill index array ──
+  triangles.forEach((t, i) => {
+    indices[i*3]     = t.a;
+    indices[i*3 + 1] = t.b;
+    indices[i*3 + 2] = t.c;
+  });
+
+  // ── Build the Three.js geometry ──
+  const geometry = new THREE.BufferGeometry();
+
+  // BufferAttribute wraps a typed array; the second arg = items per vertex.
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color",    new THREE.BufferAttribute(colors,    3));
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+  // computeVertexNormals calculates which way each face points so lights work.
+  geometry.computeVertexNormals();
+
+  // ── Choose material ──
+  let material;
+  if (mode === "wireframe") {
+    // MeshBasicMaterial ignores lights — pure flat colour.
+    material = new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true });
+  } else {
+    // MeshStandardMaterial is physically based — responds to lights realistically.
+    // vertexColors: true tells it to read colour from our per-vertex array.
+    material = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness:    0.65,
+      metalness:    0.1,
+      side:         THREE.DoubleSide, // render both front and back of each triangle
+    });
+  }
+
+  // THREE.Mesh = shape + appearance combined.
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow    = true;
+  mesh.receiveShadow = true;
+
+  // Group wraps the mesh — lets us add extra objects (wireframe overlay) cleanly.
+  meshGroup = new THREE.Group();
+  meshGroup.add(mesh);
+
+  // Always add a very faint wireframe overlay on non-wireframe modes
+  // so the triangle structure is subtly visible.
+  if (mode !== "wireframe") {
+    const wm = new THREE.MeshBasicMaterial({
+      color: 0x00ff88, wireframe: true, transparent: true, opacity: 0.03
+    });
+    meshGroup.add(new THREE.Mesh(geometry, wm));
+  }
+
+  scene.add(meshGroup);
+
+  // Reposition camera to look at the centre of the new mesh.
+  camera.position.set(0, 0, 300);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+/**
+ * hslToRgb — convert HSL colour to 0–1 RGB.
+ * h = 0–360 degrees, s and l = 0–1.
+ */
+function hslToRgb(h, s, l) {
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [f(0), f(8), f(4)];
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION 6 — APP STATE + UI WIRING
+// Connects the pipeline functions to the HTML buttons.
+// ════════════════════════════════════════════════════════════════════════════
+
+// All generated code strings, keyed by stage name.
+const outputs = { pixels: "", edges: "", foreground: "", mesh: "", obj: "" };
+
+// Which stage is currently shown in the code panel.
+let curStage = "mesh";
+
+// The loaded HTMLImageElement.
+let loadedImg = null;
+
+// ── File input ──────────────────────────────────────────────────────────────
+document.getElementById("fileInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  loadedImg = new Image();
+  loadedImg.onload = () => {
+    // Draw a thumbnail in the sidebar preview canvas.
+    const c   = document.getElementById("preview2d");
+    const ctx = c.getContext("2d");
+    c.width   = c.clientWidth  || 140;
+    c.height  = c.clientHeight || 140;
+    ctx.drawImage(loadedImg, 0, 0, c.width, c.height);
+
+    setStats(`${loadedImg.naturalWidth}×${loadedImg.naturalHeight}px`, "ready — click ▶ RUN PIPELINE");
+  };
+
+  // createObjectURL makes a temporary local URL for the file — no server needed.
+  loadedImg.src = URL.createObjectURL(file);
+});
+
+// ── Run the full pipeline ────────────────────────────────────────────────────
+window.runPipeline = function() {
+  if (!loadedImg) { alert("Load an image first."); return; }
+
+  setStats("⚙ processing…");
+
+  // Defer one frame so the browser repaints the "processing" status before
+  // the heavy synchronous work starts (otherwise the UI looks frozen).
+  setTimeout(() => {
+
+    // Read settings from the toolbar inputs.
+    const edgeThresh = +document.getElementById("edgeThresh").value;
+    const bgThresh   = +document.getElementById("bgThresh").value;
+    const zScale     = +document.getElementById("zScale").value;
+
+    // ── Stage 1: read pixels ──
+    const { width, height, pixels: rawPixels } = readPixels(loadedImg);
+    outputs.pixels = pixelsToCode(width, height, rawPixels);
+
+    // ── Stage 2: edge detection ──
+    const edges = detectEdges(rawPixels, width, height, edgeThresh);
+    outputs.edges = edgesToCode(edges, width, height);
+
+    // ── Stage 3: background removal ──
+    const fgPixels = removeBackground(rawPixels, edges, width, height, bgThresh);
+    outputs.foreground = foregroundToCode(fgPixels, width, height);
+
+    // ── Stage 4: depth + mesh ──
+    const { points, triangles } = buildDepthAndMesh(fgPixels, edges, width, height, zScale);
+    outputs.mesh = meshToCode(points, triangles);
+    outputs.obj  = meshToOBJ(points, triangles);
+
+    // Keep a copy so colour-mode changes don't need a full re-run.
+    lastPoints    = points;
+    lastTriangles = triangles;
+
+    // ── Load into 3D viewer ──
+    loadMesh(points, triangles, colorMode);
+    document.getElementById("overlay").classList.add("gone");
+
+    // ── Update stats bar ──
+    const fg = fgPixels.filter(p => p.a > 0).length;
+    setStats(
+      `${width}×${height}px`,
+      `${rawPixels.length.toLocaleString()} pixels`,
+      `${edges.length.toLocaleString()} edges`,
+      `${fg.toLocaleString()} foreground`,
+      `${triangles.length.toLocaleString()} triangles`
+    );
+
+    // Show the mesh code by default.
+    showStage("mesh");
+
+  }, 30);
+};
+
+// ── Stage selector ───────────────────────────────────────────────────────────
+const STAGES = ["pixels", "edges", "foreground", "mesh", "obj"];
+
+window.showStage = function(stage) {
+  curStage = stage;
+  const code  = outputs[stage] || "// Run the pipeline first.";
+  const lines = code.split("\n").length;
+  const kb    = (code.length / 1024).toFixed(1);
+
+  document.getElementById("codeOut").value     = code;
+  document.getElementById("codeLabel").textContent =
+    `// ${stage.toUpperCase()} — ${lines.toLocaleString()} lines / ${kb} KB`;
+
+  STAGES.forEach(s =>
+    document.getElementById("btn-" + s).classList.toggle("active", s === stage)
+  );
+};
+
+// ── Colour mode ───────────────────────────────────────────────────────────────
+const COLOR_MODES = ["texture", "depth", "wireframe", "normals"];
+
+window.setColorMode = function(mode) {
+  colorMode = mode;
+
+  // If a mesh is already loaded, rebuild it with the new colours.
+  if (lastPoints && lastTriangles) loadMesh(lastPoints, lastTriangles, mode);
+
+  // Update sidebar button highlights.
+  COLOR_MODES.forEach(m =>
+    document.getElementById("cm-" + m).classList.toggle("active", m === mode)
+  );
+};
+
+// ── Auto-rotate toggle ────────────────────────────────────────────────────────
+let autoRot = true;
+window.toggleRotate = function() {
+  autoRot = !autoRot;
+  controls.autoRotate = autoRot;
+  document.getElementById("btn-rotate").classList.toggle("active", autoRot);
+};
+
+// ── Screenshot ────────────────────────────────────────────────────────────────
+window.takeScreenshot = function() {
+  // Force one render so the canvas is up to date.
+  renderer.render(scene, camera);
+
+  // toDataURL returns a base64 PNG of the current canvas content.
+  const url = canvas3d.toDataURL("image/png");
+  const a   = document.createElement("a");
+  a.href     = url;
+  a.download = "cpg-model.png";
+  a.click();
+};
+
+// ── Reset camera ──────────────────────────────────────────────────────────────
+window.resetCamera = function() {
+  camera.position.set(0, 0, 300);
+  controls.target.set(0, 0, 0);
+  controls.update();
+};
+
+// ── Copy code ─────────────────────────────────────────────────────────────────
+window.copyCode = function() {
+  navigator.clipboard.writeText(document.getElementById("codeOut").value);
+};
+
+// ── Download code ─────────────────────────────────────────────────────────────
+window.downloadCode = function() {
+  const ext  = curStage === "obj" ? "obj" : "cpg";
+  const text = outputs[curStage] || "";
+  const blob = new Blob([text], { type: "text/plain" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `cpg-${curStage}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ── Stats helper ──────────────────────────────────────────────────────────────
+// Accepts any number of string arguments and joins them as stat badges.
+function setStats(...parts) {
+  document.getElementById("stats").innerHTML =
+    parts.map(p => `<b>${p}</b>`).join(" ");
+}
+
+</script>
+
+</body>
+</html>
