@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DECIPHA — AI Avatar Battle Game</title>
+
+  <!-- Three.js from CDN via import map — no npm needed -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three":         "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Root variables — change these to retheme the whole game ── */
+    :root {
+      --bg:         #080b14;    /* dark background */
+      --surface:    #0e1420;    /* card/panel surface */
+      --border:     #1a2540;    /* subtle border */
+      --accent:     #00ff88;    /* primary accent (green) */
+      --accent2:    #00c8ff;    /* secondary accent (blue) */
+      --danger:     #ff3333;    /* health/danger */
+      --energy:     #4488ff;    /* energy colour */
+      --text:       #c8d8e8;    /* main text */
+      --text-dim:   #3a5468;    /* secondary text */
+      --font:       'Courier New', Courier, monospace;
+    }
+
+    body {
+      font-family:     var(--font);
+      background:      var(--bg);
+      color:           var(--text);
+      min-height:      100vh;
+      overflow:        hidden; /* the 3D canvas handles scrolling */
+    }
+
+    /* ── Shared screen wrapper ── */
+    /* All screens are absolutely positioned and overlap the 3D canvas */
+    .screen {
+      position:        fixed;
+      inset:           0;
+      display:         none;      /* hidden by default — JS shows the active one */
+      flex-direction:  column;
+      align-items:     center;
+      justify-content: center;
+      background:      rgba(8, 11, 20, 0.96);  /* slightly transparent over 3D */
+      z-index:         10;
+      padding:         20px;
+      overflow-y:      auto;
+    }
+
+    /* ── Shared button style ── */
+    .btn {
+      padding:        10px 24px;
+      background:     transparent;
+      border:         1px solid var(--border);
+      color:          var(--text-dim);
+      font-family:    var(--font);
+      font-size:      13px;
+      letter-spacing: 0.08em;
+      cursor:         pointer;
+      border-radius:  3px;
+      transition:     all 0.15s;
+      text-transform: uppercase;
+    }
+    .btn:hover         { border-color: var(--accent); color: var(--accent); }
+    .btn.primary       { border-color: var(--accent); color: var(--accent); }
+    .btn.danger        { border-color: var(--danger); color: var(--danger); }
+    .btn:disabled      { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── Logo ── */
+    .logo {
+      font-size:      32px;
+      color:          var(--accent);
+      letter-spacing: 0.2em;
+      margin-bottom:  8px;
+    }
+    .logo-sub {
+      font-size:      11px;
+      color:          var(--text-dim);
+      letter-spacing: 0.15em;
+      margin-bottom:  40px;
+    }
+
+    /* ── Menu buttons row ── */
+    .menu-btns {
+      display:        flex;
+      flex-direction: column;
+      gap:            10px;
+      width:          240px;
+    }
+
+    /* ── Panel (card) ── */
+    .panel {
+      background:   var(--surface);
+      border:       1px solid var(--border);
+      border-radius: 4px;
+      padding:      20px;
+      width:        100%;
+      max-width:    480px;
+      margin-bottom: 16px;
+    }
+    .panel-title {
+      font-size:      12px;
+      color:          var(--accent);
+      letter-spacing: 0.12em;
+      margin-bottom:  12px;
+    }
+
+    /* ── Input fields ── */
+    input[type=text], input[type=file], textarea {
+      width:        100%;
+      background:   #060a10;
+      border:       1px solid var(--border);
+      color:        var(--accent2);
+      padding:      8px 10px;
+      font-family:  var(--font);
+      font-size:    12px;
+      border-radius: 3px;
+      outline:      none;
+      margin-bottom: 8px;
+    }
+    input[type=file] { cursor: pointer; }
+
+    /* ── Avatar preview ── */
+    #avatar-preview-img {
+      max-width:    200px;
+      max-height:   200px;
+      border:       1px solid var(--border);
+      border-radius: 3px;
+      display:      none;
+      margin:       12px auto;
+    }
+    #avatar-status {
+      font-size:  11px;
+      color:      var(--text-dim);
+      text-align: center;
+      min-height: 20px;
+    }
+
+    /* ── Shop grid ── */
+    #shop-items {
+      display:   grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap:       12px;
+      width:     100%;
+      max-width: 800px;
+    }
+    .shop-section-title {
+      grid-column: 1 / -1;        /* spans full width */
+      font-size:   11px;
+      color:       var(--accent);
+      letter-spacing: 0.12em;
+      padding:     8px 0 4px;
+    }
+    .shop-card {
+      background:   var(--surface);
+      border:       1px solid var(--border);
+      border-radius: 3px;
+      padding:      12px;
+      display:      flex;
+      flex-direction: column;
+      gap:          6px;
+    }
+    .shop-item-name { font-size: 12px; color: var(--text); }
+    .shop-item-desc { font-size: 10px; color: var(--text-dim); line-height: 1.4; }
+    .shop-item-cost { font-size: 12px; color: var(--accent2); }
+    .shop-buy-btn   { composes: btn; font-size: 10px; padding: 5px; }
+
+    /* ── Power loadout ── */
+    #powers-loadout    { width: 100%; max-width: 600px; }
+    .power-slots-row   { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .power-slot-loadout {
+      flex:          1;
+      min-width:     80px;
+      border:        1px solid var(--border);
+      padding:       8px;
+      text-align:    center;
+      font-size:     10px;
+      color:         var(--text-dim);
+      border-radius: 3px;
+    }
+    .power-row {
+      display:      flex;
+      gap:          12px;
+      padding:      8px 10px;
+      border:       1px solid var(--border);
+      border-radius: 3px;
+      cursor:       pointer;
+      font-size:    11px;
+      margin-bottom: 4px;
+      align-items:  center;
+    }
+    .power-row:hover { border-color: var(--accent); }
+    .power-name { color: var(--text); flex: 1; }
+    .power-type,
+    .power-dmg,
+    .power-cost,
+    .power-cd   { color: var(--text-dim); }
+    .section-title {
+      font-size:    10px;
+      color:        var(--accent);
+      letter-spacing: 0.1em;
+      margin:       12px 0 6px;
+    }
+
+    /* ─────────────────────────────────────────
+       HUD — overlays the 3D canvas during play
+    ───────────────────────────────────────── */
+    #hud {
+      position:  fixed;
+      inset:     0;
+      pointer-events: none;  /* clicks pass through to the game canvas */
+      z-index:   5;
+      display:   none;       /* shown only when game screen is active */
+    }
+
+    /* Health and energy bars — bottom-left */
+    #hud-bars {
+      position:   absolute;
+      bottom:     16px;
+      left:       16px;
+      width:      240px;
+    }
+    .bar-row {
+      display:       flex;
+      align-items:   center;
+      gap:           8px;
+      margin-bottom: 6px;
+    }
+    .bar-label {
+      font-size: 9px;
+      color:     var(--text-dim);
+      width:     14px;
+    }
+    .bar-track {
+      flex:         1;
+      height:       8px;
+      background:   #0a1020;
+      border:       1px solid var(--border);
+      border-radius: 2px;
+      overflow:     hidden;
+    }
+    .bar-fill {
+      height:     100%;
+      border-radius: 2px;
+      transition: width 0.1s;
+    }
+    .bar-text {
+      font-size: 9px;
+      color:     var(--text-dim);
+      width:     60px;
+      text-align: right;
+    }
+
+    /* Power slots — bottom-centre */
+    #hud-powers {
+      position:       absolute;
+      bottom:         16px;
+      left:           50%;
+      transform:      translateX(-50%);
+      display:        flex;
+      gap:            6px;
+    }
+    .power-slot {
+      width:        48px;
+      height:       48px;
+      border:       1px solid var(--border);
+      border-radius: 4px;
+      background:   var(--surface);
+      display:      flex;
+      flex-direction: column;
+      align-items:  center;
+      justify-content: center;
+      position:     relative;
+      overflow:     hidden;
+    }
+    .power-slot.ready  { border-color: var(--accent); }
+    .power-slot.cooling { border-color: var(--text-dim); }
+    .power-slot.empty  { opacity: 0.3; }
+    .power-slot .key-label {
+      font-size: 8px;
+      color:     var(--text-dim);
+      position:  absolute;
+      top:       3px;
+      left:      4px;
+    }
+    .power-slot .cooldown {
+      font-size: 12px;
+      color:     var(--text);
+      font-weight: bold;
+    }
+    .power-slot .cd-overlay {
+      position:   absolute;
+      bottom:     0;
+      left:       0;
+      width:      100%;
+      background: rgba(0,0,0,0.6);
+      transition: height 0.1s;
+      pointer-events: none;
+    }
+
+    /* Coins and level — top-left */
+    #hud-top {
+      position:  absolute;
+      top:       12px;
+      left:      16px;
+      display:   flex;
+      gap:       16px;
+      font-size: 11px;
+    }
+    #hud-coins   { color: var(--accent2); }
+    #player-level { color: var(--accent); }
+
+    /* Match timer — top-centre */
+    #match-timer {
+      position:   absolute;
+      top:        12px;
+      left:       50%;
+      transform:  translateX(-50%);
+      font-size:  14px;
+      color:      var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+
+    /* ── Floating messages ── */
+    #floating-messages {
+      position:  fixed;
+      top:       70px;
+      left:      50%;
+      transform: translateX(-50%);
+      z-index:   20;
+      display:   flex;
+      flex-direction: column;
+      align-items: center;
+      gap:       6px;
+      pointer-events: none;
+    }
+    .floating-msg {
+      background:  rgba(14, 20, 32, 0.92);
+      border:      1px solid var(--border);
+      padding:     7px 16px;
+      font-size:   12px;
+      color:       var(--accent);
+      border-radius: 3px;
+      opacity:     0;
+      transform:   translateY(-10px);
+      transition:  opacity 0.2s, transform 0.2s;
+    }
+    .floating-msg.visible {
+      opacity:   1;
+      transform: translateY(0);
+    }
+
+    /* ── AI power creation dialog ── */
+    #ai-power-dialog {
+      position:   fixed;
+      inset:      0;
+      background: rgba(8, 11, 20, 0.95);
+      z-index:    30;
+      display:    none;
+      align-items: center;
+      justify-content: center;
+    }
+    .dialog-box {
+      background:   var(--surface);
+      border:       1px solid var(--accent);
+      border-radius: 4px;
+      padding:      24px;
+      width:        100%;
+      max-width:    440px;
+    }
+    .dialog-title {
+      color:        var(--accent);
+      font-size:    14px;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+    #ai-power-input {
+      height: 80px;
+      resize: vertical;
+    }
+    #ai-power-result {
+      font-size:    11px;
+      color:        var(--text-dim);
+      min-height:   40px;
+      margin:       10px 0;
+      line-height:  1.6;
+    }
+    .power-preview {
+      background:  rgba(0,255,136,0.05);
+      border:      1px solid var(--accent);
+      padding:     10px;
+      border-radius: 3px;
+      font-size:   11px;
+      margin-bottom: 10px;
+      line-height: 1.7;
+    }
+
+    /* ── Match result screen ── */
+    #match-result-screen {
+      position:  fixed;
+      inset:     0;
+      background: rgba(8,11,20,0.97);
+      z-index:   25;
+      display:   none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap:       16px;
+    }
+    #match-winner-text {
+      font-size:  36px;
+      letter-spacing: 0.15em;
+    }
+    .reward-row {
+      display:    flex;
+      justify-content: space-between;
+      gap:        20px;
+      font-size:  12px;
+      padding:    4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── 3D Canvas fills the whole window ── */
+    #game-canvas {
+      position: fixed;
+      inset:    0;
+      width:    100%;
+      height:   100%;
+      display:  block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════
+       THREE.JS CANVAS  — always visible behind screens
+  ══════════════════════════════════════ -->
+  <canvas id="game-canvas"></canvas>
+
+
+  <!-- ══════════════════════════════════════
+       HUD — shown during gameplay
+  ══════════════════════════════════════ -->
+  <div id="hud">
+
+    <!-- Top-left: coins and level -->
+    <div id="hud-top">
+      <span id="hud-coins">⬡ 0</span>
+      <span id="player-level">Lv.1</span>
+    </div>
+
+    <!-- Top-centre: match timer -->
+    <div id="match-timer">0:00</div>
+
+    <!-- Bottom-left: health and energy bars -->
+    <div id="hud-bars">
+      <div class="bar-row">
+        <span class="bar-label">HP</span>
+        <div class="bar-track">
+          <div class="bar-fill" id="health-bar-fill" style="width:100%; background:#00ff88;"></div>
+        </div>
+        <span class="bar-text" id="health-text">100/100</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">EN</span>
+        <div class="bar-track">
+          <div class="bar-fill" id="energy-bar-fill" style="width:100%; background:#4488ff;"></div>
+        </div>
+        <span class="bar-text" id="energy-text">100/100</span>
+      </div>
+    </div>
+
+    <!-- Bottom-centre: power slots Q E R (F G H if unlocked) -->
+    <div id="hud-powers">
+      <!-- 3 default slots — more added by JavaScript when unlocked -->
+      <div class="power-slot empty" id="power-slot-0">
+        <span class="key-label">Q</span>
+        <span class="cooldown" style="display:none;"></span>
+        <div class="cd-overlay" style="height:0%"></div>
+      </div>
+      <div class="power-slot empty" id="power-slot-1">
+        <span class="key-label">E</span>
+        <span class="cooldown" style="display:none;"></span>
+        <div class="cd-overlay" style="height:0%"></div>
+      </div>
+      <div class="power-slot empty" id="power-slot-2">
+        <span class="key-label">R</span>
+        <span class="cooldown" style="display:none;"></span>
+        <div class="cd-overlay" style="height:0%"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       FLOATING MESSAGES (notifications)
+  ══════════════════════════════════════ -->
+  <div id="floating-messages"></div>
+
+
+  <!-- ══════════════════════════════════════
+       MAIN MENU SCREEN
+  ══════════════════════════════════════ -->
+  <div class="screen" id="main-menu">
+    <div class="logo">◼ DECIPHA</div>
+    <div class="logo-sub">AI AVATAR BATTLE GAME</div>
+    <div class="menu-btns">
+      <button class="btn primary" id="btn-create-avatar">CREATE AVATAR</button>
+      <button class="btn" id="btn-play">PLAY</button>
+      <button class="btn" id="btn-powers">POWERS</button>
+      <button class="btn" id="btn-shop">SHOP</button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       AVATAR CREATION SCREEN
+  ══════════════════════════════════════ -->
+  <div class="screen" id="avatar-creation">
+
+    <div class="panel">
+      <div class="panel-title">◼ CREATE YOUR AVATAR</div>
+      <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px; line-height:1.6;">
+        Upload any image — a photo, drawing or character art.
+        The AI will analyse it and build your 3D avatar from it.
+      </p>
+
+      <!-- Name input -->
+      <input type="text" id="avatar-name-input" placeholder="Enter your avatar name…" />
+
+      <!-- Image file picker -->
+      <input type="file" id="avatar-file-input" accept="image/*" />
+
+      <!-- Preview of loaded image -->
+      <img id="avatar-preview-img" alt="Avatar preview" />
+
+      <!-- Pipeline status message -->
+      <div id="avatar-status">Upload an image to begin.</div>
+    </div>
+
+    <!-- Confirm button — disabled until image is processed -->
+    <button class="btn primary" id="btn-confirm-avatar" disabled>CREATE AVATAR</button>
+    <button class="btn btn-back" style="margin-top:8px;">← BACK</button>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       MODE SELECT SCREEN
+  ══════════════════════════════════════ -->
+  <div class="screen" id="mode-select">
+
+    <div class="logo" style="font-size:20px; margin-bottom:20px;">SELECT GAME MODE</div>
+
+    <div class="panel" style="text-align:center;">
+      <div class="panel-title">⚔ ARENA 1V1</div>
+      <p style="font-size:11px; color:var(--text-dim); margin-bottom:14px;">
+        Fight a single AI opponent. Last one standing wins.
+      </p>
+      <button class="btn primary" id="btn-arena">ENTER ARENA</button>
+    </div>
+
+    <div class="panel" style="text-align:center;">
+      <div class="panel-title">🌊 SURVIVAL</div>
+      <p style="font-size:11px; color:var(--text-dim); margin-bottom:14px;">
+        Survive endless waves of enemies. Each wave is harder.
+      </p>
+      <button class="btn" id="btn-survival">START SURVIVAL</button>
+    </div>
+
+    <button class="btn btn-back" style="margin-top:8px;">← BACK</button>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       GAME SCREEN (3D canvas is always visible — this just shows HUD)
+  ══════════════════════════════════════ -->
+  <div class="screen" id="game" style="background:transparent; pointer-events:none;">
+    <!-- The game canvas shows through — this screen just activates the HUD -->
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       SHOP SCREEN
+  ══════════════════════════════════════ -->
+  <div class="screen" id="shop">
+
+    <div style="display:flex; align-items:baseline; gap:16px; margin-bottom:16px; width:100%; max-width:800px;">
+      <div class="logo" style="font-size:18px; margin:0;">⬡ SHOP</div>
+      <div id="shop-coins-display" style="font-size:12px; color:var(--accent2);">Coins: 0</div>
+      <button class="btn btn-back" style="margin-left:auto;">← BACK</button>
+    </div>
+
+    <!-- Shop items injected here by buildShopUI() -->
+    <div id="shop-items" style="overflow-y:auto; max-height:70vh;"></div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       POWERS SCREEN
+  ══════════════════════════════════════ -->
+  <div class="screen" id="powers">
+
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px; width:100%; max-width:600px;">
+      <div class="logo" style="font-size:18px; margin:0;">⚡ POWERS</div>
+      <button class="btn" id="btn-create-ai-power" style="margin-left:auto;">+ CREATE AI POWER</button>
+      <button class="btn btn-back">← BACK</button>
+    </div>
+
+    <!-- Power loadout injected here by buildPowersUI() -->
+    <div id="powers-loadout" style="overflow-y:auto; max-height:70vh;"></div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       AI POWER CREATION DIALOG
+  ══════════════════════════════════════ -->
+  <div id="ai-power-dialog">
+    <div class="dialog-box">
+      <div class="dialog-title">✦ CREATE A CUSTOM POWER</div>
+      <p style="font-size:11px; color:var(--text-dim); margin-bottom:10px; line-height:1.5;">
+        Describe your power in plain English. The AI will generate it, balance it for your level, and add it to your collection.
+      </p>
+      <textarea id="ai-power-input"
+        placeholder="e.g. A dark void that pulls all enemies toward me and then explodes for fire damage…"></textarea>
+      <div id="ai-power-result"><!-- AI output appears here --></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn primary" id="btn-generate-power">GENERATE</button>
+        <button class="btn" id="btn-close-dialog">CANCEL</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       MATCH RESULT SCREEN
+  ══════════════════════════════════════ -->
+  <div id="match-result-screen">
+    <div id="match-winner-text">VICTORY!</div>
+    <div id="match-rewards-list" style="min-width:280px;"></div>
+    <button class="btn primary" id="btn-continue-after-match" style="margin-top:16px;">CONTINUE</button>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       MAIN SCRIPT — boots the whole game
+  ══════════════════════════════════════ -->
+  <script type="module">
+
+    // Import everything we need
+    import { createGameState, initEngine } from './js/engine.js';
+    import { initUI, loadAvatarFromStorage, showScreen } from './js/ui.js';
+
+    // ── Create the global game state ──
+    // This object flows through every system as the single source of truth
+    const gameState = createGameState();
+
+    // ── Try to load a saved avatar ──
+    const savedAvatar = loadAvatarFromStorage();
+    if (savedAvatar) {
+      // Restore the saved player data
+      gameState.localPlayer = savedAvatar;
+      gameState.players     = [savedAvatar];
+      console.log(`Loaded avatar: ${savedAvatar.name} (Lv.${savedAvatar.stats?.level})`);
+    }
+
+    // ── Init Three.js and the game loop ──
+    const canvas = document.getElementById('game-canvas');
+    initEngine(canvas, gameState);
+
+    // ── Init all UI event listeners ──
+    initUI(gameState);
+
+    // ── Show the HUD when the game screen is active ──
+    // We observe which screen is visible and toggle the HUD accordingly
+    const observer = new MutationObserver(() => {
+      const gameScreen = document.getElementById('game');
+      const hud        = document.getElementById('hud');
+      if (gameScreen && hud) {
+        const isGameVisible = gameScreen.style.display !== 'none';
+        hud.style.display   = isGameVisible ? 'block' : 'none';
+      }
+    });
+    // Observe all screen elements for display changes
+    document.querySelectorAll('.screen').forEach(el => {
+      observer.observe(el, { attributes: true, attributeFilter: ['style'] });
+    });
+
+    console.log('DECIPHA engine initialised');
+    console.log('Files: cpg.js | pipeline.js | powers.js | physics.js | combat.js | ai.js | economy.js | renderer.js | engine.js | ui.js');
+
+  </script>
+
+</body>
+</html>
