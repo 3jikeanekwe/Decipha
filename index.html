@@ -1,703 +1,2967 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DECIPHA — AI Avatar Battle Game</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>DECIPHA — Arcane Arena</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<style>
+/* =====================================================
+   RESET & ROOT VARIABLES
+   ===================================================== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#04050e;
+  --surface:#080b18;
+  --panel:#0b0f1f;
+  --border:#151d35;
+  --accent:#00f5ff;
+  --accent2:#7b2fff;
+  --gold:#ffc200;
+  --danger:#ff1744;
+  --safe:#00e676;
+  --energy:#448aff;
+  --text:#c8d8f8;
+  --dim:#2a3a5a;
+  --font:'Rajdhani',sans-serif;
+  --mono:'Share Tech Mono',monospace;
+}
+html,body{
+  width:100%;height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  overflow:hidden;
+  user-select:none;
+}
+/* =====================================================
+   SCROLLBAR
+   ===================================================== */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--dim);border-radius:2px}
 
-  <!-- Three.js from CDN via import map — no npm needed -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three":         "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
-    }
-  }
-  </script>
+/* =====================================================
+GAME CANVAS — fills entire window, always behind
+===================================================== */
+#game-canvas{
+position:fixed;inset:0;
+width:100%;height:100%;
+display:block;
+}
 
-  <style>
-    /* ── Reset ── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* =====================================================
+SCREEN SYSTEM
+All screens overlay the canvas. Only one visible at a time.
+===================================================== */
+.screen{
+position:fixed;inset:0;
+display:none;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+z-index:20;
+padding:20px;
+overflow-y:auto;
+/* subtle noise texture via SVG data URI */
+background:radial-gradient(ellipse at 50% 0%,rgba(0,245,255,.06) 0%,transparent 70%),
+radial-gradient(ellipse at 80% 100%,rgba(123,47,255,.08) 0%,transparent 60%),
+var(–bg);
+}
+.screen.active{display:flex}
 
-    /* ── Root variables — change these to retheme the whole game ── */
-    :root {
-      --bg:         #080b14;    /* dark background */
-      --surface:    #0e1420;    /* card/panel surface */
-      --border:     #1a2540;    /* subtle border */
-      --accent:     #00ff88;    /* primary accent (green) */
-      --accent2:    #00c8ff;    /* secondary accent (blue) */
-      --danger:     #ff3333;    /* health/danger */
-      --energy:     #4488ff;    /* energy colour */
-      --text:       #c8d8e8;    /* main text */
-      --text-dim:   #3a5468;    /* secondary text */
-      --font:       'Courier New', Courier, monospace;
-    }
+/* =====================================================
+SHARED COMPONENTS
+===================================================== */
+/* ── Buttons ── */
+.btn{
+padding:10px 28px;
+background:transparent;
+border:1px solid var(–dim);
+color:var(–dim);
+font-family:var(–font);
+font-size:15px;
+font-weight:600;
+letter-spacing:.12em;
+text-transform:uppercase;
+cursor:pointer;
+border-radius:2px;
+transition:border-color .15s,color .15s,background .15s,box-shadow .15s;
+position:relative;
+overflow:hidden;
+}
+.btn::before{
+content:’’;position:absolute;inset:0;
+background:linear-gradient(90deg,transparent,rgba(255,255,255,.04),transparent);
+transform:translateX(-100%);
+transition:transform .4s;
+}
+.btn:hover::before{transform:translateX(100%)}
+.btn:hover{border-color:var(–accent);color:var(–accent);box-shadow:0 0 16px rgba(0,245,255,.15)}
+.btn.primary{border-color:var(–accent);color:var(–accent);box-shadow:0 0 8px rgba(0,245,255,.1)}
+.btn.primary:hover{background:rgba(0,245,255,.08);box-shadow:0 0 24px rgba(0,245,255,.25)}
+.btn.gold{border-color:var(–gold);color:var(–gold)}
+.btn.gold:hover{background:rgba(255,194,0,.08);box-shadow:0 0 16px rgba(255,194,0,.2)}
+.btn.danger{border-color:var(–danger);color:var(–danger)}
+.btn:disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
+.btn.sm{padding:6px 16px;font-size:12px}
 
-    body {
-      font-family:     var(--font);
-      background:      var(--bg);
-      color:           var(--text);
-      min-height:      100vh;
-      overflow:        hidden; /* the 3D canvas handles scrolling */
-    }
+/* ── Inputs ── */
+input[type=text],input[type=number],textarea,select{
+width:100%;
+background:#060810;
+border:1px solid var(–border);
+color:var(–accent);
+padding:10px 14px;
+font-family:var(–mono);
+font-size:13px;
+border-radius:2px;
+outline:none;
+transition:border-color .15s;
+}
+input:focus,textarea:focus,select:focus{border-color:var(–accent)}
+select option{background:var(–surface)}
+textarea{resize:vertical;min-height:70px}
 
-    /* ── Shared screen wrapper ── */
-    /* All screens are absolutely positioned and overlap the 3D canvas */
-    .screen {
-      position:        fixed;
-      inset:           0;
-      display:         none;      /* hidden by default — JS shows the active one */
-      flex-direction:  column;
-      align-items:     center;
-      justify-content: center;
-      background:      rgba(8, 11, 20, 0.96);  /* slightly transparent over 3D */
-      z-index:         10;
-      padding:         20px;
-      overflow-y:      auto;
-    }
+/* ── Panel ── */
+.panel{
+background:var(–panel);
+border:1px solid var(–border);
+border-radius:3px;
+padding:20px;
+}
+.panel-title{
+font-size:11px;
+font-weight:700;
+color:var(–accent);
+letter-spacing:.2em;
+text-transform:uppercase;
+margin-bottom:14px;
+display:flex;
+align-items:center;
+gap:8px;
+}
+.panel-title::after{
+content:’’;flex:1;height:1px;
+background:linear-gradient(90deg,var(–border),transparent);
+}
 
-    /* ── Shared button style ── */
-    .btn {
-      padding:        10px 24px;
-      background:     transparent;
-      border:         1px solid var(--border);
-      color:          var(--text-dim);
-      font-family:    var(--font);
-      font-size:      13px;
-      letter-spacing: 0.08em;
-      cursor:         pointer;
-      border-radius:  3px;
-      transition:     all 0.15s;
-      text-transform: uppercase;
-    }
-    .btn:hover         { border-color: var(--accent); color: var(--accent); }
-    .btn.primary       { border-color: var(--accent); color: var(--accent); }
-    .btn.danger        { border-color: var(--danger); color: var(--danger); }
-    .btn:disabled      { opacity: 0.3; cursor: not-allowed; }
+/* ── Divider ── */
+.divider{height:1px;background:var(–border);margin:16px 0}
 
-    /* ── Logo ── */
-    .logo {
-      font-size:      32px;
-      color:          var(--accent);
-      letter-spacing: 0.2em;
-      margin-bottom:  8px;
-    }
-    .logo-sub {
-      font-size:      11px;
-      color:          var(--text-dim);
-      letter-spacing: 0.15em;
-      margin-bottom:  40px;
-    }
+/* ── Logo ── */
+.logo-mark{
+font-size:42px;
+font-weight:700;
+letter-spacing:.3em;
+color:var(–accent);
+text-shadow:0 0 40px rgba(0,245,255,.4),0 0 80px rgba(0,245,255,.1);
+line-height:1;
+}
+.logo-sub{
+font-family:var(–mono);
+font-size:11px;
+color:var(–dim);
+letter-spacing:.25em;
+margin-top:4px;
+}
 
-    /* ── Menu buttons row ── */
-    .menu-btns {
-      display:        flex;
-      flex-direction: column;
-      gap:            10px;
-      width:          240px;
-    }
+/* =====================================================
+MAIN MENU
+===================================================== */
+#screen-menu{gap:0}
+.menu-logo-wrap{text-align:center;margin-bottom:48px}
+.menu-btns{display:flex;flex-direction:column;gap:10px;width:260px}
 
-    /* ── Panel (card) ── */
-    .panel {
-      background:   var(--surface);
-      border:       1px solid var(--border);
-      border-radius: 4px;
-      padding:      20px;
-      width:        100%;
-      max-width:    480px;
-      margin-bottom: 16px;
-    }
-    .panel-title {
-      font-size:      12px;
-      color:          var(--accent);
-      letter-spacing: 0.12em;
-      margin-bottom:  12px;
-    }
+/* Animated background rings */
+.menu-rings{
+position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0;
+}
+.menu-rings svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
 
-    /* ── Input fields ── */
-    input[type=text], input[type=file], textarea {
-      width:        100%;
-      background:   #060a10;
-      border:       1px solid var(--border);
-      color:        var(--accent2);
-      padding:      8px 10px;
-      font-family:  var(--font);
-      font-size:    12px;
-      border-radius: 3px;
-      outline:      none;
-      margin-bottom: 8px;
-    }
-    input[type=file] { cursor: pointer; }
+/* =====================================================
+CHARACTER CREATION
+===================================================== */
+#screen-create{gap:16px}
+.create-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:12px;
+width:100%;max-width:720px;
+}
+.archetype-card{
+background:var(–panel);
+border:1px solid var(–border);
+border-radius:3px;
+padding:16px;
+cursor:pointer;
+transition:border-color .15s,box-shadow .15s;
+position:relative;
+overflow:hidden;
+}
+.archetype-card:hover{border-color:var(–accent);box-shadow:0 0 20px rgba(0,245,255,.1)}
+.archetype-card.selected{border-color:var(–accent2);box-shadow:0 0 24px rgba(123,47,255,.2)}
+.archetype-card.selected::after{
+content:‘✓’;
+position:absolute;top:10px;right:12px;
+color:var(–accent2);font-size:18px;
+}
+.archetype-svg-wrap{
+width:80px;height:80px;margin:0 auto 12px;
+}
+.archetype-name{
+font-size:18px;font-weight:700;
+letter-spacing:.08em;
+text-align:center;
+margin-bottom:4px;
+}
+.archetype-desc{
+font-size:12px;color:var(–dim);
+text-align:center;line-height:1.5;
+}
+.archetype-stats{
+display:flex;gap:6px;justify-content:center;
+margin-top:10px;flex-wrap:wrap;
+}
+.stat-pip{
+font-size:10px;font-family:var(–mono);
+color:var(–dim);
+border:1px solid var(–border);
+padding:2px 7px;border-radius:2px;
+}
+.stat-pip.high{color:var(–accent);border-color:var(–accent)}
 
-    /* ── Avatar preview ── */
-    #avatar-preview-img {
-      max-width:    200px;
-      max-height:   200px;
-      border:       1px solid var(--border);
-      border-radius: 3px;
-      display:      none;
-      margin:       12px auto;
-    }
-    #avatar-status {
-      font-size:  11px;
-      color:      var(--text-dim);
-      text-align: center;
-      min-height: 20px;
-    }
+/* =====================================================
+POWERS SCREEN
+===================================================== */
+#screen-powers{gap:14px}
+.powers-layout{
+display:grid;
+grid-template-columns:1fr 320px;
+gap:14px;
+width:100%;max-width:900px;
+}
+.slot-grid{display:flex;flex-direction:column;gap:8px}
+.power-slot-row{
+display:flex;align-items:center;gap:10px;
+padding:10px 14px;
+background:var(–panel);
+border:1px solid var(–border);
+border-radius:3px;
+cursor:pointer;
+transition:border-color .15s;
+min-height:54px;
+}
+.power-slot-row:hover{border-color:var(–dim)}
+.power-slot-row.filled{border-left:3px solid var(–accent2)}
+.slot-key{
+font-family:var(–mono);font-size:11px;
+color:var(–dim);width:18px;flex-shrink:0;
+}
+.slot-icon{
+width:32px;height:32px;flex-shrink:0;
+border-radius:2px;overflow:hidden;
+display:flex;align-items:center;justify-content:center;
+background:var(–border);font-size:16px;
+}
+.slot-info{flex:1;min-width:0}
+.slot-name{font-size:15px;font-weight:600;color:var(–text)}
+.slot-meta{font-size:11px;color:var(–dim);font-family:var(–mono)}
+.slot-empty{color:var(–dim);font-size:13px;letter-spacing:.05em}
+.slot-remove{
+font-size:18px;color:var(–dim);cursor:pointer;padding:0 4px;
+transition:color .15s;flex-shrink:0;
+}
+.slot-remove:hover{color:var(–danger)}
 
-    /* ── Shop grid ── */
-    #shop-items {
-      display:   grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap:       12px;
-      width:     100%;
-      max-width: 800px;
-    }
-    .shop-section-title {
-      grid-column: 1 / -1;        /* spans full width */
-      font-size:   11px;
-      color:       var(--accent);
-      letter-spacing: 0.12em;
-      padding:     8px 0 4px;
-    }
-    .shop-card {
-      background:   var(--surface);
-      border:       1px solid var(--border);
-      border-radius: 3px;
-      padding:      12px;
-      display:      flex;
-      flex-direction: column;
-      gap:          6px;
-    }
-    .shop-item-name { font-size: 12px; color: var(--text); }
-    .shop-item-desc { font-size: 10px; color: var(--text-dim); line-height: 1.4; }
-    .shop-item-cost { font-size: 12px; color: var(--accent2); }
-    .shop-buy-btn   { composes: btn; font-size: 10px; padding: 5px; }
+.powers-library{display:flex;flex-direction:column;gap:8px;max-height:500px;overflow-y:auto}
+.lib-power{
+padding:10px 12px;
+background:var(–panel);
+border:1px solid var(–border);
+border-radius:3px;
+cursor:pointer;
+transition:border-color .15s;
+}
+.lib-power:hover{border-color:var(–accent2)}
+.lib-power-top{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.lib-power-icon{font-size:18px}
+.lib-power-name{font-size:14px;font-weight:600;flex:1}
+.lib-power-cost{font-size:11px;font-family:var(–mono);color:var(–gold)}
+.lib-power-meta{font-size:10px;color:var(–dim);font-family:var(–mono)}
 
-    /* ── Power loadout ── */
-    #powers-loadout    { width: 100%; max-width: 600px; }
-    .power-slots-row   { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-    .power-slot-loadout {
-      flex:          1;
-      min-width:     80px;
-      border:        1px solid var(--border);
-      padding:       8px;
-      text-align:    center;
-      font-size:     10px;
-      color:         var(--text-dim);
-      border-radius: 3px;
-    }
-    .power-row {
-      display:      flex;
-      gap:          12px;
-      padding:      8px 10px;
-      border:       1px solid var(--border);
-      border-radius: 3px;
-      cursor:       pointer;
-      font-size:    11px;
-      margin-bottom: 4px;
-      align-items:  center;
-    }
-    .power-row:hover { border-color: var(--accent); }
-    .power-name { color: var(--text); flex: 1; }
-    .power-type,
-    .power-dmg,
-    .power-cost,
-    .power-cd   { color: var(--text-dim); }
-    .section-title {
-      font-size:    10px;
-      color:        var(--accent);
-      letter-spacing: 0.1em;
-      margin:       12px 0 6px;
-    }
+/* =====================================================
+SHOP SCREEN
+===================================================== */
+#screen-shop{gap:14px}
+.shop-header{display:flex;align-items:center;gap:16px;width:100%;max-width:800px}
+.shop-coins{font-size:18px;font-weight:700;color:var(–gold);margin-left:auto}
+.shop-grid{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+gap:12px;
+width:100%;max-width:800px;
+overflow-y:auto;max-height:70vh;
+}
+.shop-section{
+grid-column:1/-1;
+font-size:10px;letter-spacing:.2em;color:var(–accent);
+font-weight:700;padding:8px 0 4px;
+border-bottom:1px solid var(–border);
+}
+.shop-card{
+background:var(–panel);
+border:1px solid var(–border);
+border-radius:3px;
+padding:14px;
+display:flex;flex-direction:column;gap:6px;
+transition:border-color .15s;
+}
+.shop-card:hover{border-color:var(–dim)}
+.shop-card.owned{opacity:.45}
+.shop-card-icon{font-size:24px;margin-bottom:2px}
+.shop-card-name{font-size:14px;font-weight:700}
+.shop-card-desc{font-size:11px;color:var(–dim);line-height:1.5}
+.shop-card-cost{font-size:13px;font-family:var(–mono);color:var(–gold);font-weight:700}
+.shop-card-cost.free{color:var(–safe)}
 
-    /* ─────────────────────────────────────────
-       HUD — overlays the 3D canvas during play
-    ───────────────────────────────────────── */
-    #hud {
-      position:  fixed;
-      inset:     0;
-      pointer-events: none;  /* clicks pass through to the game canvas */
-      z-index:   5;
-      display:   none;       /* shown only when game screen is active */
-    }
+/* =====================================================
+MODE SELECT
+===================================================== */
+#screen-modes{gap:14px}
+.mode-cards{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+.mode-card{
+width:220px;
+background:var(–panel);
+border:1px solid var(–border);
+border-radius:3px;
+padding:24px 18px;
+text-align:center;
+cursor:pointer;
+transition:border-color .2s,box-shadow .2s;
+}
+.mode-card:hover{
+border-color:var(–accent);
+box-shadow:0 0 30px rgba(0,245,255,.12);
+}
+.mode-icon{font-size:36px;margin-bottom:10px}
+.mode-name{font-size:20px;font-weight:700;letter-spacing:.05em;margin-bottom:6px}
+.mode-desc{font-size:12px;color:var(–dim);line-height:1.5}
 
-    /* Health and energy bars — bottom-left */
-    #hud-bars {
-      position:   absolute;
-      bottom:     16px;
-      left:       16px;
-      width:      240px;
-    }
-    .bar-row {
-      display:       flex;
-      align-items:   center;
-      gap:           8px;
-      margin-bottom: 6px;
-    }
-    .bar-label {
-      font-size: 9px;
-      color:     var(--text-dim);
-      width:     14px;
-    }
-    .bar-track {
-      flex:         1;
-      height:       8px;
-      background:   #0a1020;
-      border:       1px solid var(--border);
-      border-radius: 2px;
-      overflow:     hidden;
-    }
-    .bar-fill {
-      height:     100%;
-      border-radius: 2px;
-      transition: width 0.1s;
-    }
-    .bar-text {
-      font-size: 9px;
-      color:     var(--text-dim);
-      width:     60px;
-      text-align: right;
-    }
+/* =====================================================
+HUD — overlays the canvas during combat
+===================================================== */
+#hud{
+position:fixed;inset:0;pointer-events:none;
+z-index:15;display:none;
+}
+#hud.active{display:block}
 
-    /* Power slots — bottom-centre */
-    #hud-powers {
-      position:       absolute;
-      bottom:         16px;
-      left:           50%;
-      transform:      translateX(-50%);
-      display:        flex;
-      gap:            6px;
-    }
-    .power-slot {
-      width:        48px;
-      height:       48px;
-      border:       1px solid var(--border);
-      border-radius: 4px;
-      background:   var(--surface);
-      display:      flex;
-      flex-direction: column;
-      align-items:  center;
-      justify-content: center;
-      position:     relative;
-      overflow:     hidden;
-    }
-    .power-slot.ready  { border-color: var(--accent); }
-    .power-slot.cooling { border-color: var(--text-dim); }
-    .power-slot.empty  { opacity: 0.3; }
-    .power-slot .key-label {
-      font-size: 8px;
-      color:     var(--text-dim);
-      position:  absolute;
-      top:       3px;
-      left:      4px;
-    }
-    .power-slot .cooldown {
-      font-size: 12px;
-      color:     var(--text);
-      font-weight: bold;
-    }
-    .power-slot .cd-overlay {
-      position:   absolute;
-      bottom:     0;
-      left:       0;
-      width:      100%;
-      background: rgba(0,0,0,0.6);
-      transition: height 0.1s;
-      pointer-events: none;
-    }
+/* health + energy bars bottom-left */
+#hud-bars{
+position:absolute;bottom:16px;left:16px;
+width:220px;display:flex;flex-direction:column;gap:6px;
+}
+.hud-bar-row{display:flex;align-items:center;gap:8px}
+.hud-bar-lbl{font-size:10px;color:var(–dim);font-family:var(–mono);width:16px}
+.hud-bar-track{
+flex:1;height:7px;
+background:rgba(255,255,255,.06);
+border:1px solid var(–border);
+border-radius:1px;overflow:hidden;
+}
+.hud-bar-fill{height:100%;transition:width .12s}
+#hud-hp-fill{background:linear-gradient(90deg,#ff1744,#ff6b35)}
+#hud-en-fill{background:linear-gradient(90deg,#1565c0,#448aff)}
+.hud-bar-num{font-size:9px;font-family:var(–mono);color:var(–dim);width:54px;text-align:right}
 
-    /* Coins and level — top-left */
-    #hud-top {
-      position:  absolute;
-      top:       12px;
-      left:      16px;
-      display:   flex;
-      gap:       16px;
-      font-size: 11px;
-    }
-    #hud-coins   { color: var(--accent2); }
-    #player-level { color: var(--accent); }
+/* power slots bottom-centre */
+#hud-slots{
+position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+display:flex;gap:8px;
+}
+.hud-slot{
+width:52px;height:52px;
+background:rgba(8,11,24,.85);
+border:1px solid var(–border);
+border-radius:3px;
+position:relative;overflow:hidden;
+display:flex;flex-direction:column;
+align-items:center;justify-content:center;
+transition:border-color .15s;
+pointer-events:all;cursor:pointer;
+}
+.hud-slot.ready{border-color:var(–accent2)}
+.hud-slot.locked{border-color:var(–dim);opacity:.35;cursor:default;pointer-events:none}
+.hud-slot-icon{font-size:20px;line-height:1}
+.hud-slot-key{
+font-size:9px;font-family:var(–mono);color:var(–dim);
+position:absolute;top:3px;left:4px;
+}
+.hud-slot-cd{
+position:absolute;bottom:2px;left:0;right:0;
+text-align:center;
+font-size:10px;font-family:var(–mono);color:var(–text);
+display:none;
+}
+.hud-slot-overlay{
+position:absolute;inset:0;
+background:rgba(0,0,0,.6);
+transform-origin:top;
+transition:transform .1s;
+pointer-events:none;
+}
 
-    /* Match timer — top-centre */
-    #match-timer {
-      position:   absolute;
-      top:        12px;
-      left:       50%;
-      transform:  translateX(-50%);
-      font-size:  14px;
-      color:      var(--text-dim);
-      letter-spacing: 0.1em;
-    }
+/* enemy health bar top-centre */
+#hud-enemy{
+position:absolute;top:16px;left:50%;transform:translateX(-50%);
+width:280px;text-align:center;
+display:none;
+}
+#hud-enemy.active{display:block}
+#hud-enemy-name{font-size:13px;font-weight:700;letter-spacing:.08em;margin-bottom:4px}
+#hud-enemy-bar{
+height:8px;background:rgba(255,255,255,.06);
+border:1px solid var(–border);border-radius:1px;overflow:hidden;
+}
+#hud-enemy-fill{
+height:100%;
+background:linear-gradient(90deg,var(–danger),#ff6b35);
+transition:width .12s;
+}
 
-    /* ── Floating messages ── */
-    #floating-messages {
-      position:  fixed;
-      top:       70px;
-      left:      50%;
-      transform: translateX(-50%);
-      z-index:   20;
-      display:   flex;
-      flex-direction: column;
-      align-items: center;
-      gap:       6px;
-      pointer-events: none;
-    }
-    .floating-msg {
-      background:  rgba(14, 20, 32, 0.92);
-      border:      1px solid var(--border);
-      padding:     7px 16px;
-      font-size:   12px;
-      color:       var(--accent);
-      border-radius: 3px;
-      opacity:     0;
-      transform:   translateY(-10px);
-      transition:  opacity 0.2s, transform 0.2s;
-    }
-    .floating-msg.visible {
-      opacity:   1;
-      transform: translateY(0);
-    }
+/* wave/score info top-right */
+#hud-info{
+position:absolute;top:14px;right:16px;
+text-align:right;font-family:var(–mono);font-size:11px;color:var(–dim);
+display:flex;flex-direction:column;gap:3px;
+}
+#hud-coins-live{color:var(–gold)}
+#hud-wave{color:var(–accent)}
 
-    /* ── AI power creation dialog ── */
-    #ai-power-dialog {
-      position:   fixed;
-      inset:      0;
-      background: rgba(8, 11, 20, 0.95);
-      z-index:    30;
-      display:    none;
-      align-items: center;
-      justify-content: center;
-    }
-    .dialog-box {
-      background:   var(--surface);
-      border:       1px solid var(--accent);
-      border-radius: 4px;
-      padding:      24px;
-      width:        100%;
-      max-width:    440px;
-    }
-    .dialog-title {
-      color:        var(--accent);
-      font-size:    14px;
-      letter-spacing: 0.1em;
-      margin-bottom: 12px;
-    }
-    #ai-power-input {
-      height: 80px;
-      resize: vertical;
-    }
-    #ai-power-result {
-      font-size:    11px;
-      color:        var(--text-dim);
-      min-height:   40px;
-      margin:       10px 0;
-      line-height:  1.6;
-    }
-    .power-preview {
-      background:  rgba(0,255,136,0.05);
-      border:      1px solid var(--accent);
-      padding:     10px;
-      border-radius: 3px;
-      font-size:   11px;
-      margin-bottom: 10px;
-      line-height: 1.7;
-    }
+/* status effects near bottom-left */
+#hud-status{
+position:absolute;bottom:80px;left:16px;
+display:flex;gap:6px;
+}
+.status-badge{
+padding:3px 8px;border-radius:2px;
+font-size:10px;font-family:var(–mono);font-weight:700;
+animation:statusPulse 1s ease-in-out infinite alternate;
+}
+@keyframes statusPulse{from{opacity:.6}to{opacity:1}}
 
-    /* ── Match result screen ── */
-    #match-result-screen {
-      position:  fixed;
-      inset:     0;
-      background: rgba(8,11,20,0.97);
-      z-index:   25;
-      display:   none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap:       16px;
-    }
-    #match-winner-text {
-      font-size:  36px;
-      letter-spacing: 0.15em;
-    }
-    .reward-row {
-      display:    flex;
-      justify-content: space-between;
-      gap:        20px;
-      font-size:  12px;
-      padding:    4px 0;
-      border-bottom: 1px solid var(--border);
-    }
+/* floating damage numbers */
+#hud-floats{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.float-num{
+position:absolute;
+font-size:20px;font-weight:700;font-family:var(–mono);
+pointer-events:none;
+animation:floatUp .9s ease-out forwards;
+}
+@keyframes floatUp{
+0%{transform:translateY(0);opacity:1}
+100%{transform:translateY(-60px);opacity:0}
+}
 
-    /* ── 3D Canvas fills the whole window ── */
-    #game-canvas {
-      position: fixed;
-      inset:    0;
-      width:    100%;
-      height:   100%;
-      display:  block;
-    }
-  </style>
+/* =====================================================
+FLOATING MESSAGES
+===================================================== */
+#toast-container{
+position:fixed;top:70px;left:50%;transform:translateX(-50%);
+z-index:50;display:flex;flex-direction:column;align-items:center;gap:6px;
+pointer-events:none;
+}
+.toast{
+background:rgba(11,15,31,.95);
+border:1px solid var(–border);
+padding:8px 20px;
+font-size:13px;font-weight:600;letter-spacing:.05em;
+border-radius:2px;
+opacity:0;transform:translateY(-8px);
+transition:opacity .2s,transform .2s;
+}
+.toast.show{opacity:1;transform:translateY(0)}
+
+/* =====================================================
+AI POWER CREATION DIALOG
+===================================================== */
+#dialog-aipower{
+position:fixed;inset:0;
+background:rgba(4,5,14,.95);
+z-index:60;
+display:none;
+align-items:center;justify-content:center;
+}
+#dialog-aipower.open{display:flex}
+.dialog-box{
+background:var(–panel);
+border:1px solid var(–accent2);
+box-shadow:0 0 40px rgba(123,47,255,.2);
+border-radius:4px;
+padding:28px;
+width:100%;max-width:460px;
+}
+.dialog-title{
+font-size:16px;font-weight:700;letter-spacing:.12em;
+color:var(–accent2);margin-bottom:12px;
+}
+.dialog-hint{font-size:12px;color:var(–dim);line-height:1.6;margin-bottom:14px}
+#ai-power-preview{
+background:rgba(0,0,0,.3);
+border:1px solid var(–border);
+border-radius:3px;padding:12px;
+font-size:11px;font-family:var(–mono);
+color:var(–dim);line-height:1.8;
+min-height:60px;margin:10px 0;
+}
+.dialog-btns{display:flex;gap:8px;margin-top:12px}
+
+/* =====================================================
+MATCH RESULT
+===================================================== */
+#screen-result{gap:20px}
+#result-title{font-size:48px;font-weight:700;letter-spacing:.2em;line-height:1}
+.result-rewards{
+display:flex;flex-direction:column;gap:6px;
+min-width:280px;
+}
+.result-row{
+display:flex;justify-content:space-between;
+padding:6px 0;border-bottom:1px solid var(–border);
+font-size:13px;font-family:var(–mono);
+}
+.result-val{color:var(–gold);font-weight:700}
+
+/* =====================================================
+RESPONSIVE
+===================================================== */
+@media(max-width:680px){
+.create-grid{grid-template-columns:1fr}
+.powers-layout{grid-template-columns:1fr}
+.hud-slot{width:44px;height:44px}
+.logo-mark{font-size:30px}
+#hud-enemy{width:200px}
+}
+
+/* =====================================================
+CSS 3D MENU ANIMATION
+===================================================== */
+@keyframes ringRotate{
+from{transform:translate(-50%,-50%) rotate(0deg)}
+to{transform:translate(-50%,-50%) rotate(360deg)}
+}
+@keyframes ringRotateCCW{
+from{transform:translate(-50%,-50%) rotate(0deg)}
+to{transform:translate(-50%,-50%) rotate(-360deg)}
+}
+@keyframes menuFadeIn{
+from{opacity:0;transform:translateY(12px)}
+to{opacity:1;transform:translateY(0)}
+}
+.screen.active > *{animation:menuFadeIn .4s ease both}
+.screen.active > *:nth-child(2){animation-delay:.06s}
+.screen.active > *:nth-child(3){animation-delay:.12s}
+.screen.active > *:nth-child(4){animation-delay:.18s}
+.screen.active > *:nth-child(5){animation-delay:.24s}
+</style>
+
 </head>
 <body>
 
-  <!-- ══════════════════════════════════════
-       THREE.JS CANVAS  — always visible behind screens
-  ══════════════════════════════════════ -->
-  <canvas id="game-canvas"></canvas>
+<!-- =====================================================
+     3D GAME CANVAS
+     ===================================================== -->
 
+<canvas id="game-canvas"></canvas>
 
-  <!-- ══════════════════════════════════════
-       HUD — shown during gameplay
-  ══════════════════════════════════════ -->
-  <div id="hud">
+<!-- =====================================================
+     HUD
+     ===================================================== -->
 
-    <!-- Top-left: coins and level -->
-    <div id="hud-top">
-      <span id="hud-coins">⬡ 0</span>
-      <span id="player-level">Lv.1</span>
+<div id="hud">
+
+  <!-- Player bars -->
+
+  <div id="hud-bars">
+    <div class="hud-bar-row">
+      <span class="hud-bar-lbl">HP</span>
+      <div class="hud-bar-track"><div class="hud-bar-fill" id="hud-hp-fill" style="width:100%"></div></div>
+      <span class="hud-bar-num" id="hud-hp-num">100/100</span>
     </div>
-
-    <!-- Top-centre: match timer -->
-    <div id="match-timer">0:00</div>
-
-    <!-- Bottom-left: health and energy bars -->
-    <div id="hud-bars">
-      <div class="bar-row">
-        <span class="bar-label">HP</span>
-        <div class="bar-track">
-          <div class="bar-fill" id="health-bar-fill" style="width:100%; background:#00ff88;"></div>
-        </div>
-        <span class="bar-text" id="health-text">100/100</span>
-      </div>
-      <div class="bar-row">
-        <span class="bar-label">EN</span>
-        <div class="bar-track">
-          <div class="bar-fill" id="energy-bar-fill" style="width:100%; background:#4488ff;"></div>
-        </div>
-        <span class="bar-text" id="energy-text">100/100</span>
-      </div>
-    </div>
-
-    <!-- Bottom-centre: power slots Q E R (F G H if unlocked) -->
-    <div id="hud-powers">
-      <!-- 3 default slots — more added by JavaScript when unlocked -->
-      <div class="power-slot empty" id="power-slot-0">
-        <span class="key-label">Q</span>
-        <span class="cooldown" style="display:none;"></span>
-        <div class="cd-overlay" style="height:0%"></div>
-      </div>
-      <div class="power-slot empty" id="power-slot-1">
-        <span class="key-label">E</span>
-        <span class="cooldown" style="display:none;"></span>
-        <div class="cd-overlay" style="height:0%"></div>
-      </div>
-      <div class="power-slot empty" id="power-slot-2">
-        <span class="key-label">R</span>
-        <span class="cooldown" style="display:none;"></span>
-        <div class="cd-overlay" style="height:0%"></div>
-      </div>
+    <div class="hud-bar-row">
+      <span class="hud-bar-lbl">EN</span>
+      <div class="hud-bar-track"><div class="hud-bar-fill" id="hud-en-fill" style="width:100%"></div></div>
+      <span class="hud-bar-num" id="hud-en-num">100/100</span>
     </div>
   </div>
 
+  <!-- Power slots (Q E R F G H) -->
 
-  <!-- ══════════════════════════════════════
-       FLOATING MESSAGES (notifications)
-  ══════════════════════════════════════ -->
-  <div id="floating-messages"></div>
+  <div id="hud-slots"></div>
 
+  <!-- Enemy bar -->
 
-  <!-- ══════════════════════════════════════
-       MAIN MENU SCREEN
-  ══════════════════════════════════════ -->
-  <div class="screen" id="main-menu">
-    <div class="logo">◼ DECIPHA</div>
-    <div class="logo-sub">AI AVATAR BATTLE GAME</div>
-    <div class="menu-btns">
-      <button class="btn primary" id="btn-create-avatar">CREATE AVATAR</button>
-      <button class="btn" id="btn-play">PLAY</button>
-      <button class="btn" id="btn-powers">POWERS</button>
-      <button class="btn" id="btn-shop">SHOP</button>
-    </div>
+  <div id="hud-enemy">
+    <div id="hud-enemy-name">ENEMY</div>
+    <div id="hud-enemy-bar"><div id="hud-enemy-fill" style="width:100%"></div></div>
   </div>
 
+  <!-- Info top-right -->
 
-  <!-- ══════════════════════════════════════
-       AVATAR CREATION SCREEN
-  ══════════════════════════════════════ -->
-  <div class="screen" id="avatar-creation">
-
-    <div class="panel">
-      <div class="panel-title">◼ CREATE YOUR AVATAR</div>
-      <p style="font-size:11px; color:var(--text-dim); margin-bottom:12px; line-height:1.6;">
-        Upload any image — a photo, drawing or character art.
-        The AI will analyse it and build your 3D avatar from it.
-      </p>
-
-      <!-- Name input -->
-      <input type="text" id="avatar-name-input" placeholder="Enter your avatar name…" />
-
-      <!-- Image file picker -->
-      <input type="file" id="avatar-file-input" accept="image/*" />
-
-      <!-- Preview of loaded image -->
-      <img id="avatar-preview-img" alt="Avatar preview" />
-
-      <!-- Pipeline status message -->
-      <div id="avatar-status">Upload an image to begin.</div>
-    </div>
-
-    <!-- Confirm button — disabled until image is processed -->
-    <button class="btn primary" id="btn-confirm-avatar" disabled>CREATE AVATAR</button>
-    <button class="btn btn-back" style="margin-top:8px;">← BACK</button>
+  <div id="hud-info">
+    <div id="hud-coins-live">⬡ 0</div>
+    <div id="hud-wave"></div>
   </div>
 
+  <!-- Status effects -->
 
-  <!-- ══════════════════════════════════════
-       MODE SELECT SCREEN
-  ══════════════════════════════════════ -->
-  <div class="screen" id="mode-select">
+  <div id="hud-status"></div>
 
-    <div class="logo" style="font-size:20px; margin-bottom:20px;">SELECT GAME MODE</div>
+  <!-- Floating numbers -->
 
-    <div class="panel" style="text-align:center;">
-      <div class="panel-title">⚔ ARENA 1V1</div>
-      <p style="font-size:11px; color:var(--text-dim); margin-bottom:14px;">
-        Fight a single AI opponent. Last one standing wins.
-      </p>
-      <button class="btn primary" id="btn-arena">ENTER ARENA</button>
-    </div>
+  <div id="hud-floats"></div>
+</div>
 
-    <div class="panel" style="text-align:center;">
-      <div class="panel-title">🌊 SURVIVAL</div>
-      <p style="font-size:11px; color:var(--text-dim); margin-bottom:14px;">
-        Survive endless waves of enemies. Each wave is harder.
-      </p>
-      <button class="btn" id="btn-survival">START SURVIVAL</button>
-    </div>
+<!-- =====================================================
+     TOAST NOTIFICATIONS
+     ===================================================== -->
 
-    <button class="btn btn-back" style="margin-top:8px;">← BACK</button>
+<div id="toast-container"></div>
+
+<!-- =====================================================
+     MAIN MENU SCREEN
+     ===================================================== -->
+
+<div class="screen active" id="screen-menu">
+  <!-- Animated background rings -->
+  <div class="menu-rings" aria-hidden="true">
+    <svg width="700" height="700" style="animation:ringRotate 18s linear infinite">
+      <ellipse cx="350" cy="350" rx="300" ry="300" fill="none" stroke="rgba(0,245,255,.04)" stroke-width="1" stroke-dasharray="8 12"/>
+      <ellipse cx="350" cy="350" rx="240" ry="240" fill="none" stroke="rgba(123,47,255,.05)" stroke-width="1" stroke-dasharray="4 16"/>
+    </svg>
+    <svg width="400" height="400" style="animation:ringRotateCCW 12s linear infinite">
+      <ellipse cx="200" cy="200" rx="180" ry="180" fill="none" stroke="rgba(0,245,255,.06)" stroke-width="1" stroke-dasharray="2 8"/>
+    </svg>
   </div>
 
-
-  <!-- ══════════════════════════════════════
-       GAME SCREEN (3D canvas is always visible — this just shows HUD)
-  ══════════════════════════════════════ -->
-  <div class="screen" id="game" style="background:transparent; pointer-events:none;">
-    <!-- The game canvas shows through — this screen just activates the HUD -->
+  <div class="menu-logo-wrap">
+    <div class="logo-mark">DECIPHA</div>
+    <div class="logo-sub">ARCANE ARENA — FORGE YOUR POWERS</div>
   </div>
 
+  <div class="menu-btns">
+    <button class="btn primary" onclick="UI.show('screen-create')">CREATE AVATAR</button>
+    <button class="btn" id="btn-continue" style="display:none" onclick="UI.show('screen-modes')">CONTINUE</button>
+    <button class="btn" onclick="UI.show('screen-powers')">POWERS</button>
+    <button class="btn gold" onclick="UI.show('screen-shop')">SHOP</button>
+    <button class="btn" onclick="UI.show('screen-modes')">PLAY</button>
+  </div>
+</div>
 
-  <!-- ══════════════════════════════════════
-       SHOP SCREEN
-  ══════════════════════════════════════ -->
-  <div class="screen" id="shop">
+<!-- =====================================================
+     CHARACTER CREATION SCREEN
+     ===================================================== -->
 
-    <div style="display:flex; align-items:baseline; gap:16px; margin-bottom:16px; width:100%; max-width:800px;">
-      <div class="logo" style="font-size:18px; margin:0;">⬡ SHOP</div>
-      <div id="shop-coins-display" style="font-size:12px; color:var(--accent2);">Coins: 0</div>
-      <button class="btn btn-back" style="margin-left:auto;">← BACK</button>
-    </div>
+<div class="screen" id="screen-create">
+  <div class="panel-title" style="font-size:20px;letter-spacing:.15em">CHOOSE YOUR ARCHETYPE</div>
 
-    <!-- Shop items injected here by buildShopUI() -->
-    <div id="shop-items" style="overflow-y:auto; max-height:70vh;"></div>
+  <div class="create-grid" id="archetype-grid">
+    <!-- Injected by JS -->
   </div>
 
+<input type="text" id="avatar-name-input" placeholder="Enter your warrior's name…"
+style="max-width:400px;margin-top:8px;font-size:15px;text-align:center"/>
 
-  <!-- ══════════════════════════════════════
-       POWERS SCREEN
-  ══════════════════════════════════════ -->
-  <div class="screen" id="powers">
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <button class="btn" onclick="UI.show('screen-menu')">← BACK</button>
+    <button class="btn primary" id="btn-confirm-create" onclick="Game.confirmCreate()">FORGE AVATAR →</button>
+  </div>
+</div>
 
-    <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px; width:100%; max-width:600px;">
-      <div class="logo" style="font-size:18px; margin:0;">⚡ POWERS</div>
-      <button class="btn" id="btn-create-ai-power" style="margin-left:auto;">+ CREATE AI POWER</button>
-      <button class="btn btn-back">← BACK</button>
+<!-- =====================================================
+     POWERS SCREEN
+     ===================================================== -->
+
+<div class="screen" id="screen-powers">
+  <div style="display:flex;align-items:center;gap:14px;width:100%;max-width:900px;margin-bottom:6px">
+    <div class="panel-title" style="margin:0;font-size:18px">⚡ POWERS</div>
+    <button class="btn sm" id="btn-open-ai-power" onclick="UI.openAIPower()" style="margin-left:auto">+ AI CREATE</button>
+    <button class="btn sm" onclick="UI.show('screen-menu')">← BACK</button>
+  </div>
+
+  <div class="powers-layout">
+    <!-- Left: current loadout -->
+    <div>
+      <div class="panel-title">LOADOUT SLOTS</div>
+      <div class="slot-grid" id="loadout-slots"></div>
     </div>
 
-    <!-- Power loadout injected here by buildPowersUI() -->
-    <div id="powers-loadout" style="overflow-y:auto; max-height:70vh;"></div>
+```
+<!-- Right: power library -->
+<div>
+  <div class="panel-title">YOUR POWERS</div>
+  <div class="powers-library" id="powers-library"></div>
+</div>
+```
+
   </div>
+</div>
 
+<!-- =====================================================
+     SHOP SCREEN
+     ===================================================== -->
 
-  <!-- ══════════════════════════════════════
-       AI POWER CREATION DIALOG
-  ══════════════════════════════════════ -->
-  <div id="ai-power-dialog">
-    <div class="dialog-box">
-      <div class="dialog-title">✦ CREATE A CUSTOM POWER</div>
-      <p style="font-size:11px; color:var(--text-dim); margin-bottom:10px; line-height:1.5;">
-        Describe your power in plain English. The AI will generate it, balance it for your level, and add it to your collection.
-      </p>
-      <textarea id="ai-power-input"
-        placeholder="e.g. A dark void that pulls all enemies toward me and then explodes for fire damage…"></textarea>
-      <div id="ai-power-result"><!-- AI output appears here --></div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn primary" id="btn-generate-power">GENERATE</button>
-        <button class="btn" id="btn-close-dialog">CANCEL</button>
-      </div>
+<div class="screen" id="screen-shop">
+  <div class="shop-header" style="max-width:800px">
+    <div class="panel-title" style="margin:0;font-size:18px">⬡ SHOP</div>
+    <div class="shop-coins" id="shop-coins-disp">⬡ 0</div>
+    <button class="btn sm" onclick="UI.show('screen-menu')">← BACK</button>
+  </div>
+  <div class="shop-grid" id="shop-grid"></div>
+</div>
+
+<!-- =====================================================
+     MODE SELECT SCREEN
+     ===================================================== -->
+
+<div class="screen" id="screen-modes">
+  <div class="panel-title" style="font-size:20px;margin-bottom:24px">SELECT MODE</div>
+  <div class="mode-cards">
+    <div class="mode-card" onclick="Game.startMatch('arena')">
+      <div class="mode-icon">⚔</div>
+      <div class="mode-name">ARENA</div>
+      <div class="mode-desc">1v1 AI opponent. Last one standing wins. 3 lives each.</div>
+    </div>
+    <div class="mode-card" onclick="Game.startMatch('survival')">
+      <div class="mode-icon">🌊</div>
+      <div class="mode-name">SURVIVAL</div>
+      <div class="mode-desc">Endless waves of enemies. How many can you survive?</div>
     </div>
   </div>
+  <button class="btn" onclick="UI.show('screen-menu')" style="margin-top:20px">← BACK</button>
+</div>
 
+<!-- =====================================================
+     MATCH RESULT SCREEN
+     ===================================================== -->
 
-  <!-- ══════════════════════════════════════
-       MATCH RESULT SCREEN
-  ══════════════════════════════════════ -->
-  <div id="match-result-screen">
-    <div id="match-winner-text">VICTORY!</div>
-    <div id="match-rewards-list" style="min-width:280px;"></div>
-    <button class="btn primary" id="btn-continue-after-match" style="margin-top:16px;">CONTINUE</button>
+<div class="screen" id="screen-result">
+  <div id="result-title">VICTORY</div>
+  <div class="result-rewards" id="result-rewards"></div>
+  <div style="display:flex;gap:10px">
+    <button class="btn primary" onclick="UI.show('screen-modes')">PLAY AGAIN</button>
+    <button class="btn" onclick="UI.show('screen-menu')">MENU</button>
   </div>
+</div>
 
+<!-- =====================================================
+     AI POWER CREATION DIALOG
+     ===================================================== -->
 
-  <!-- ══════════════════════════════════════
-       MAIN SCRIPT — boots the whole game
-  ══════════════════════════════════════ -->
-  <script type="module">
+<div id="dialog-aipower">
+  <div class="dialog-box">
+    <div class="dialog-title">✦ AI POWER CREATION</div>
+    <div class="dialog-hint">
+      Describe your power in plain language. The engine will generate, balance and add it to your collection.
+    </div>
+    <textarea id="ai-power-input" placeholder="e.g. A shadow vortex that pulls all enemies and explodes for lightning damage…" rows="3"></textarea>
+    <div id="ai-power-preview">// Your power will appear here…</div>
+    <div class="dialog-btns">
+      <button class="btn primary" onclick="UI.generateAIPower()">GENERATE</button>
+      <button class="btn" id="btn-keep-power" style="display:none" onclick="UI.keepAIPower()">KEEP IT</button>
+      <button class="btn" onclick="UI.closeAIPower()">CANCEL</button>
+    </div>
+  </div>
+</div>
 
-    // Import everything we need
-    import { createGameState, initEngine } from './js/engine.js';
-    import { initUI, loadAvatarFromStorage, showScreen } from './js/ui.js';
+<!-- =====================================================
+     MAIN JAVASCRIPT
+     ===================================================== -->
 
-    // ── Create the global game state ──
-    // This object flows through every system as the single source of truth
-    const gameState = createGameState();
+<script>
+"use strict";
+// ═══════════════════════════════════════════════════════
+// SECTION 1 ─ CONSTANTS & DATA DEFINITIONS
+// ═══════════════════════════════════════════════════════
 
-    // ── Try to load a saved avatar ──
-    const savedAvatar = loadAvatarFromStorage();
-    if (savedAvatar) {
-      // Restore the saved player data
-      gameState.localPlayer = savedAvatar;
-      gameState.players     = [savedAvatar];
-      console.log(`Loaded avatar: ${savedAvatar.name} (Lv.${savedAvatar.stats?.level})`);
+// Canvas and context (set up in Boot.init)
+let CVS, CTX, W, H;
+
+// ── Element colours used for powers and effects ──
+const EL = {
+  fire:      {r:255,g:80,b:20,   hex:'#ff5014', name:'Fire'},
+  water:     {r:0,  g:180,b:255, hex:'#00b4ff', name:'Cryo'},
+  lightning: {r:255,g:240,b:0,   hex:'#fff000', name:'Storm'},
+  dark:      {r:160,g:0,  b:255, hex:'#a000ff', name:'Void'},
+  light:     {r:255,g:255,b:180, hex:'#ffffb4', name:'Radiance'},
+  wind:      {r:140,g:255,b:180, hex:'#8cffb4', name:'Gale'},
+  earth:     {r:180,g:100,b:20,  hex:'#b46414', name:'Terra'},
+  none:      {r:180,g:200,b:255, hex:'#b4c8ff', name:'Force'},
+};
+
+// ── Power effect emojis ──
+const POWER_ICONS = {
+  fire:'🔥',water:'❄️',lightning:'⚡',dark:'🌑',
+  light:'✨',wind:'🌪️',earth:'🪨',none:'💫',
+};
+
+// ── 4 playable archetypes ──
+const ARCHETYPES = [
+  {
+    id:'voidblade',
+    name:'Voidblade',
+    desc:'High damage, close range. Tears reality with dark energy.',
+    colour:'#a000ff',
+    stats:{hp:90, energy:80, speed:5.8, str:14, def:4, jumpForce:7},
+    startPowers:['shadowslash','nullfield'],
+    svgPath:`M40,10 L55,30 L50,30 L50,70 L40,80 L30,70 L30,30 L25,30 Z`,
+    svgAccent:'#cc44ff',
+  },
+  {
+    id:'pyromancer',
+    name:'Pyromancer',
+    desc:'Area control and burning DoT. Glass cannon caster.',
+    colour:'#ff5014',
+    stats:{hp:80, energy:110, speed:4.5, str:12, def:3, jumpForce:6},
+    startPowers:['fireball','infernowave'],
+    svgPath:`M40,5 L45,20 L60,15 L50,28 L70,30 L52,38 L58,55 L40,45 L22,55 L28,38 L10,30 L30,28 L20,15 L35,20 Z`,
+    svgAccent:'#ff8040',
+  },
+  {
+    id:'stormbringer',
+    name:'Stormbringer',
+    desc:'Long range, fast projectiles. Stuns and chains lightning.',
+    colour:'#fff000',
+    stats:{hp:85, energy:100, speed:5.2, str:11, def:5, jumpForce:7.5},
+    startPowers:['thunderbolt','staticshield'],
+    svgPath:`M40,8 L43,24 L58,18 L46,30 L60,35 L44,36 L50,52 L40,42 L30,52 L36,36 L20,35 L34,30 L22,18 L37,24 Z`,
+    svgAccent:'#ffff60',
+  },
+  {
+    id:'shadowstep',
+    name:'Shadowstep',
+    desc:'Evasion and mobility specialist. Blink and ambush.',
+    colour:'#00f5ff',
+    stats:{hp:95, energy:90, speed:7.0, str:10, def:6, jumpForce:9},
+    startPowers:['blinkstrike','smokeveil'],
+    svgPath:`M40,10 L48,22 L60,20 L52,30 L56,42 L40,36 L24,42 L28,30 L20,20 L32,22 Z M40,36 L36,55 L40,60 L44,55 Z`,
+    svgAccent:'#44ffff',
+  },
+];
+
+// ── Full power catalogue ──
+// Every power the game knows about. Players unlock/purchase these.
+const POWER_DB = {
+  // ── Starter powers ──
+  shadowslash:{
+    id:'shadowslash',name:'Shadow Slash',element:'dark',type:'melee',
+    icon:'🌑',emoji:'🌑',
+    energyCost:18,cooldown:0.8,damage:28,range:3.5,aoeRadius:0,
+    duration:0,speed:0,onHit:'none',onHitDuration:0,knockback:4,
+    desc:'Tear through enemies with a blade of void energy.',
+    cost:0,unlocked:true,
+  },
+  nullfield:{
+    id:'nullfield',name:'Null Field',element:'dark',type:'area',
+    icon:'🌀',emoji:'🌀',
+    energyCost:35,cooldown:6,damage:20,range:0,aoeRadius:5,
+    duration:2,speed:0,onHit:'slow',onHitDuration:3,knockback:0,
+    desc:'Collapse space around you, slowing all nearby enemies.',
+    cost:0,unlocked:true,
+  },
+  fireball:{
+    id:'fireball',name:'Fireball',element:'fire',type:'projectile',
+    icon:'🔥',emoji:'🔥',
+    energyCost:22,cooldown:1.2,damage:32,range:18,aoeRadius:2.5,
+    duration:0,speed:14,onHit:'burn',onHitDuration:3,knockback:3,
+    desc:'Launch a flaming orb that explodes on impact.',
+    cost:0,unlocked:true,
+  },
+  infernowave:{
+    id:'infernowave',name:'Inferno Wave',element:'fire',type:'cone',
+    icon:'💥',emoji:'💥',
+    energyCost:40,cooldown:5,damage:45,range:7,aoeRadius:4,
+    duration:0,speed:0,onHit:'burn',onHitDuration:4,knockback:6,
+    desc:'Release a wave of fire in a cone in front of you.',
+    cost:0,unlocked:true,
+  },
+  thunderbolt:{
+    id:'thunderbolt',name:'Thunderbolt',element:'lightning',type:'projectile',
+    icon:'⚡',emoji:'⚡',
+    energyCost:20,cooldown:0.9,damage:26,range:22,aoeRadius:0,
+    duration:0,speed:24,onHit:'stun',onHitDuration:1.2,knockback:2,
+    desc:'Instant lightning strike. Stuns on hit.',
+    cost:0,unlocked:true,
+  },
+  staticshield:{
+    id:'staticshield',name:'Static Shield',element:'lightning',type:'buff',
+    icon:'🛡',emoji:'🛡',
+    energyCost:30,cooldown:8,damage:10,range:0,aoeRadius:3,
+    duration:4,speed:0,onHit:'none',onHitDuration:0,knockback:5,
+    desc:'Electrify yourself — damages and knocks back melee attackers.',
+    cost:0,unlocked:true,
+  },
+  blinkstrike:{
+    id:'blinkstrike',name:'Blink Strike',element:'none',type:'movement',
+    icon:'💫',emoji:'💫',
+    energyCost:25,cooldown:3,damage:15,range:12,aoeRadius:0,
+    duration:0.15,speed:80,onHit:'none',onHitDuration:0,knockback:3,
+    desc:'Teleport to target position dealing damage on arrival.',
+    cost:0,unlocked:true,
+  },
+  smokeveil:{
+    id:'smokeveil',name:'Smoke Veil',element:'wind',type:'buff',
+    icon:'🌪️',emoji:'🌪️',
+    energyCost:20,cooldown:7,damage:0,range:0,aoeRadius:0,
+    duration:3,speed:0,onHit:'none',onHitDuration:0,knockback:0,
+    desc:'Become untargetable and gain 40% speed for 3 seconds.',
+    cost:0,unlocked:true,
+  },
+
+  // ── Shop powers ──
+  voidpull:{
+    id:'voidpull',name:'Void Pull',element:'dark',type:'area',
+    icon:'🌑',emoji:'🌑',
+    energyCost:38,cooldown:7,damage:22,range:0,aoeRadius:9,
+    duration:2,speed:0,onHit:'pull',onHitDuration:2,knockback:-12,
+    desc:'Gravity collapse pulls all enemies toward you.',
+    cost:320,unlocked:false,
+  },
+  iceage:{
+    id:'iceage',name:'Ice Age',element:'water',type:'area',
+    icon:'❄️',emoji:'❄️',
+    energyCost:50,cooldown:12,damage:30,range:0,aoeRadius:11,
+    duration:3,speed:0,onHit:'freeze',onHitDuration:3,knockback:0,
+    desc:'Flash-freeze the entire arena. Freezes all enemies for 3s.',
+    cost:480,unlocked:false,
+  },
+  chainlightning:{
+    id:'chainlightning',name:'Chain Lightning',element:'lightning',type:'chain',
+    icon:'⚡',emoji:'⚡',
+    energyCost:35,cooldown:4,damage:28,range:14,aoeRadius:0,
+    duration:0,speed:16,onHit:'stun',onHitDuration:0.8,knockback:4,
+    desc:'Lightning that chains between up to 3 enemies.',
+    cost:350,unlocked:false,
+  },
+  healingaura:{
+    id:'healingaura',name:'Healing Aura',element:'light',type:'buff',
+    icon:'✨',emoji:'✨',
+    energyCost:45,cooldown:10,damage:0,range:0,aoeRadius:0,
+    duration:5,speed:0,onHit:'none',onHitDuration:0,knockback:0,
+    healing:35,
+    desc:'Regenerate 35 HP over 5 seconds.',
+    cost:300,unlocked:false,
+  },
+  meteorstrike:{
+    id:'meteorstrike',name:'Meteor Strike',element:'fire',type:'projectile',
+    icon:'☄️',emoji:'☄️',
+    energyCost:55,cooldown:8,damage:65,range:20,aoeRadius:5,
+    duration:0,speed:10,onHit:'burn',onHitDuration:5,knockback:8,
+    desc:'Call down a massive flaming boulder. Huge AoE.',
+    cost:500,unlocked:false,
+  },
+  poisoncloud:{
+    id:'poisoncloud',name:'Poison Cloud',element:'wind',type:'area',
+    icon:'☠️',emoji:'☠️',
+    energyCost:30,cooldown:9,damage:8,range:0,aoeRadius:6,
+    duration:5,speed:0,onHit:'poison',onHitDuration:5,knockback:0,
+    desc:'Leave a lingering toxic cloud that poisons enemies.',
+    cost:280,unlocked:false,
+  },
+  earthquake:{
+    id:'earthquake',name:'Earthquake',element:'earth',type:'area',
+    icon:'🪨',emoji:'🪨',
+    energyCost:45,cooldown:8,damage:40,range:0,aoeRadius:8,
+    duration:0,speed:0,onHit:'knockback',onHitDuration:0,knockback:10,
+    desc:'Slam the ground, launching all nearby enemies into the air.',
+    cost:400,unlocked:false,
+  },
+};
+
+// ── Shop catalogue ──
+const SHOP = {
+  slots:[
+    {id:'slot_4',name:'4th Power Slot',desc:'Unlock slot 4 (F key)',cost:400,icon:'🔲'},
+    {id:'slot_5',name:'5th Power Slot',desc:'Unlock slot 5 (G key)',cost:800,icon:'🔲',requires:'slot_4'},
+    {id:'slot_6',name:'6th Power Slot',desc:'Unlock slot 6 (H key)',cost:1500,icon:'🔲',requires:'slot_5'},
+  ],
+  powers:['voidpull','iceage','chainlightning','healingaura','meteorstrike','poisoncloud','earthquake'],
+  services:[
+    {id:'ai_power',name:'AI Power Creation',desc:'Use AI to generate a custom power from your description.',cost:150,icon:'🤖'},
+  ],
+  cosmetics:[
+    {id:'skin_gold',name:'Golden Aura',desc:'Your character radiates gold.',cost:120,icon:'✨',type:'cosmetic'},
+    {id:'skin_neon',name:'Neon Trace',desc:'Electric neon outline.',cost:120,icon:'⚡',type:'cosmetic'},
+    {id:'skin_shadow',name:'Deep Shadow',desc:'Ink-black silhouette.',cost:120,icon:'🌑',type:'cosmetic'},
+  ],
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 2 ─ GAME STATE
+// Single object that holds all mutable game data
+// ═══════════════════════════════════════════════════════
+const GS = {
+  // ── Player data ──
+  player:null,          // current avatar data object
+  selectedArchetype:null, // temp selection during creation
+
+  // ── Active entities in a match ──
+  entities:[],          // all live entities (player+enemies)
+  projectiles:[],       // active projectiles
+  particles:[],         // visual particles
+  effects:[],           // area/timed effects
+
+  // ── Match state ──
+  matchMode:null,
+  matchActive:false,
+  matchTimer:0,
+  waveNumber:0,
+  enemiesKilled:0,
+  matchDamageDealt:0,
+  playerLives:3,
+  enemyLives:3,
+
+  // ── Input ──
+  keys:{},
+  mouse:{x:0,y:0,world:{x:0,y:0}},
+
+  // ── Timing ──
+  lastTime:0,
+  dt:0,
+
+  // ── AI power pending keep ──
+  pendingAIPower:null,
+
+  // ── Key map for power slots ──
+  slotKeys:['q','e','r','f','g','h'],
+
+  // ── Offscreen canvas for arena floor ──
+  floorCanvas:null,
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 3 ─ MATHS UTILITIES
+// Small helpers used throughout the codebase
+// ═══════════════════════════════════════════════════════
+const M = {
+  // Distance between two points (2D)
+  dist:(ax,ay,bx,by)=>Math.sqrt((bx-ax)**2+(by-ay)**2),
+  // Normalise a 2D vector to length 1
+  norm:(x,y)=>{const l=Math.sqrt(x*x+y*y)||1;return{x:x/l,y:y/l}},
+  // Clamp a value between min and max
+  clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),
+  // Linear interpolation
+  lerp:(a,b,t)=>a+(b-a)*t,
+  // Random float in range
+  rnd:(a,b)=>a+(b-a)*Math.random(),
+  // Random int in range [a,b]
+  rndi:(a,b)=>Math.floor(a+(b-a+1)*Math.random()),
+  // Degrees to radians
+  rad:(d)=>d*Math.PI/180,
+  // Convert hex colour to rgba string
+  hex2rgba:(hex,a)=>{
+    const r=parseInt(hex.slice(1,3),16);
+    const g=parseInt(hex.slice(3,5),16);
+    const b=parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${a})`;
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 4 ─ PARTICLE SYSTEM
+// GPU-friendly particle pool for spell effects
+// ═══════════════════════════════════════════════════════
+const Particles = {
+  // Spawn n particles at (x,y) with given colour and config
+  burst(x,y,colour,count=12,opts={}){
+    for(let i=0;i<count;i++){
+      const angle=M.rnd(0,Math.PI*2);
+      const speed=M.rnd(opts.minSpeed||40,opts.maxSpeed||120);
+      GS.particles.push({
+        x,y,
+        vx:Math.cos(angle)*speed,
+        vy:Math.sin(angle)*speed,
+        life:1,
+        decay:M.rnd(opts.minDecay||1.5,opts.maxDecay||2.5),
+        r:opts.r||parseInt(colour.slice(1,3),16),
+        g:opts.g||parseInt(colour.slice(3,5),16),
+        b:opts.b||parseInt(colour.slice(5,7),16),
+        size:M.rnd(opts.minSize||2,opts.maxSize||6),
+        gravity:opts.gravity||30,
+      });
+    }
+  },
+  // Spawn a ring of particles
+  ring(x,y,colour,count=16,radius=20){
+    for(let i=0;i<count;i++){
+      const angle=(i/count)*Math.PI*2;
+      const px=x+Math.cos(angle)*radius;
+      const py=y+Math.sin(angle)*radius;
+      const vx=Math.cos(angle)*60;
+      const vy=Math.sin(angle)*60;
+      GS.particles.push({
+        x:px,y:py,vx,vy,
+        life:1,decay:2,
+        r:parseInt(colour.slice(1,3),16),
+        g:parseInt(colour.slice(3,5),16),
+        b:parseInt(colour.slice(5,7),16),
+        size:M.rnd(2,4),gravity:0,
+      });
+    }
+  },
+  // Update and draw all particles
+  update(dt){
+    const del=[];
+    for(let i=0;i<GS.particles.length;i++){
+      const p=GS.particles[i];
+      p.x+=p.vx*dt;
+      p.y+=p.vy*dt;
+      p.vy+=p.gravity*dt;  // gravity pulls down
+      p.vx*=0.97;          // slight drag
+      p.life-=p.decay*dt;  // fade out over lifetime
+      if(p.life<=0){del.push(i);continue}
+
+      // Draw particle as a glowing dot
+      const a=M.clamp(p.life,0,1);
+      CTX.globalAlpha=a;
+      CTX.fillStyle=`rgb(${p.r},${p.g},${p.b})`;
+      CTX.beginPath();
+      CTX.arc(p.x,p.y,p.size*a,0,Math.PI*2);
+      CTX.fill();
+    }
+    CTX.globalAlpha=1;
+    // Remove dead particles in reverse order
+    for(let i=del.length-1;i>=0;i--) GS.particles.splice(del[i],1);
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 5 ─ ARENA RENDERER
+// Draws the isometric 3D arena floor, characters (SVG-style
+// paths on canvas), projectiles and effects each frame.
+// ═══════════════════════════════════════════════════════
+
+// Isometric projection constants
+// We use a 2:1 ratio tile — standard isometric look
+const ISO = {
+  TILE_W:80,   // tile width in screen pixels
+  TILE_H:40,   // tile height (half width = isometric ratio)
+  COLS:14,     // arena grid columns
+  ROWS:12,     // arena grid rows
+  // Offset to centre the grid on screen
+  get offX(){return W/2},
+  get offY(){return H*0.25},
+
+  // Convert grid coords (gx, gy) to screen coords (sx, sy)
+  toScreen(gx,gy){
+    return {
+      x: this.offX + (gx - gy) * (this.TILE_W / 2),
+      y: this.offY + (gx + gy) * (this.TILE_H / 2),
+    };
+  },
+  // Convert world units (wx, wy) to screen coords
+  // World: (0,0) = top-left of arena, (COLS,ROWS) = bottom-right
+  worldToScreen(wx,wy){
+    return this.toScreen(wx,wy);
+  },
+};
+
+// Build and cache the arena floor on an offscreen canvas
+// This only needs to be drawn once
+function buildFloor(){
+  const oc=document.createElement('canvas');
+  oc.width=W;oc.height=H;
+  const ctx=oc.getContext('2d');
+
+  // Draw each tile
+  for(let r=0;r<ISO.ROWS;r++){
+    for(let c=0;c<ISO.COLS;c++){
+      const {x,y}=ISO.toScreen(c,r);
+      const hw=ISO.TILE_W/2, hh=ISO.TILE_H/2;
+
+      // Tile top face
+      ctx.beginPath();
+      ctx.moveTo(x,    y-hh);  // top
+      ctx.lineTo(x+hw, y);     // right
+      ctx.lineTo(x,    y+hh);  // bottom
+      ctx.lineTo(x-hw, y);     // left
+      ctx.closePath();
+
+      // Alternate tile colours for grid pattern
+      const even=(r+c)%2===0;
+      ctx.fillStyle=even?'#080c18':'#090e1c';
+      ctx.fill();
+
+      // Tile edge (left face)
+      const depth=8;
+      ctx.beginPath();
+      ctx.moveTo(x-hw, y);
+      ctx.lineTo(x,    y+hh);
+      ctx.lineTo(x,    y+hh+depth);
+      ctx.lineTo(x-hw, y+depth);
+      ctx.closePath();
+      ctx.fillStyle='#050710';
+      ctx.fill();
+
+      // Tile edge (right face)
+      ctx.beginPath();
+      ctx.moveTo(x+hw, y);
+      ctx.lineTo(x,    y+hh);
+      ctx.lineTo(x,    y+hh+depth);
+      ctx.lineTo(x+hw, y+depth);
+      ctx.closePath();
+      ctx.fillStyle='#060812';
+      ctx.fill();
+
+      // Subtle grid lines
+      ctx.beginPath();
+      ctx.moveTo(x,    y-hh);
+      ctx.lineTo(x+hw, y);
+      ctx.lineTo(x,    y+hh);
+      ctx.lineTo(x-hw, y);
+      ctx.closePath();
+      ctx.strokeStyle='rgba(0,245,255,0.04)';
+      ctx.lineWidth=0.5;
+      ctx.stroke();
+    }
+  }
+
+  // Arena boundary glow
+  const {x:x0,y:y0}=ISO.toScreen(0,0);
+  const {x:xr,y:yr}=ISO.toScreen(ISO.COLS,0);
+  const {x:xb,y:yb}=ISO.toScreen(ISO.COLS,ISO.ROWS);
+  const {x:xl,y:yl}=ISO.toScreen(0,ISO.ROWS);
+  ctx.beginPath();
+  ctx.moveTo(x0,y0); ctx.lineTo(xr,yr);
+  ctx.lineTo(xb,yb); ctx.lineTo(xl,yl);
+  ctx.closePath();
+  ctx.strokeStyle='rgba(0,245,255,0.15)';
+  ctx.lineWidth=1.5;
+  ctx.stroke();
+
+  GS.floorCanvas=oc;
+}
+
+// Draw a character on the canvas using SVG-like path commands
+// Characters are drawn as stylised geometric figures
+function drawCharacter(ent){
+  if(!ent||ent.isDead) return;
+
+  const s=ISO.worldToScreen(ent.x,ent.y);
+  const sx=s.x, sy=s.y;
+  const sc=ent.scale||1;
+
+  CTX.save();
+  CTX.translate(sx,sy);
+
+  // Shadow under character (ellipse on floor plane)
+  CTX.globalAlpha=0.4;
+  CTX.fillStyle='rgba(0,0,0,0.8)';
+  CTX.beginPath();
+  CTX.ellipse(0,8,18*sc,6*sc,0,0,Math.PI*2);
+  CTX.fill();
+  CTX.globalAlpha=1;
+
+  // Flash white when hit
+  const flashAlpha=ent.hitFlash||0;
+  if(flashAlpha>0){
+    CTX.globalAlpha=flashAlpha;
+    CTX.fillStyle='white';
+    drawCharacterShape(ent,sc);
+    CTX.globalAlpha=1;
+  }
+
+  // Draw the character shape
+  CTX.fillStyle=ent.colour||'#00f5ff';
+  // Glow via shadow
+  CTX.shadowColor=ent.colour||'#00f5ff';
+  CTX.shadowBlur=ent.glowIntensity||8;
+  drawCharacterShape(ent,sc);
+  CTX.shadowBlur=0;
+
+  // Status effect indicators above head
+  if(ent.statusEffects&&ent.statusEffects.length>0){
+    ent.statusEffects.forEach((ef,i)=>{
+      CTX.fillStyle=STATUS_COLOURS[ef.type]||'#fff';
+      CTX.font='11px monospace';
+      CTX.textAlign='center';
+      CTX.fillText(STATUS_EMOJI[ef.type]||'●', i*14-7, -38*sc);
+    });
+  }
+
+  CTX.restore();
+
+  // Health bar above character
+  if(!ent.isPlayer){
+    const bw=36,bh=4;
+    const pct=ent.stats.health/ent.stats.maxHealth;
+    CTX.fillStyle='rgba(0,0,0,0.5)';
+    CTX.fillRect(sx-bw/2,sy-48*sc,bw,bh);
+    CTX.fillStyle=pct>0.5?'#00e676':pct>0.25?'#ffb300':'#ff1744';
+    CTX.fillRect(sx-bw/2,sy-48*sc,bw*pct,bh);
+    CTX.strokeStyle='rgba(255,255,255,0.1)';
+    CTX.lineWidth=0.5;
+    CTX.strokeRect(sx-bw/2,sy-48*sc,bw,bh);
+  }
+}
+
+// Draw the actual geometric shape for each archetype
+function drawCharacterShape(ent,sc){
+  const arch=ent.archetype;
+
+  if(arch==='voidblade'){
+    // Hooded figure with a blade
+    CTX.beginPath();
+    // Body
+    CTX.moveTo(0,-30*sc);
+    CTX.lineTo(12*sc,-10*sc);
+    CTX.lineTo(10*sc,15*sc);
+    CTX.lineTo(-10*sc,15*sc);
+    CTX.lineTo(-12*sc,-10*sc);
+    CTX.closePath();
+    CTX.fill();
+    // Blade aura lines
+    CTX.strokeStyle=ent.colour;
+    CTX.lineWidth=1.5*sc;
+    CTX.beginPath();
+    CTX.moveTo(10*sc,-20*sc);
+    CTX.lineTo(20*sc,-35*sc);
+    CTX.stroke();
+
+  } else if(arch==='pyromancer'){
+    // Pointed hat caster
+    // Hat
+    CTX.beginPath();
+    CTX.moveTo(0,-38*sc);
+    CTX.lineTo(10*sc,-18*sc);
+    CTX.lineTo(-10*sc,-18*sc);
+    CTX.closePath();
+    CTX.fill();
+    // Robe
+    CTX.beginPath();
+    CTX.moveTo(0,-18*sc);
+    CTX.bezierCurveTo(16*sc,-14*sc, 18*sc,10*sc, 12*sc,15*sc);
+    CTX.lineTo(-12*sc,15*sc);
+    CTX.bezierCurveTo(-18*sc,10*sc, -16*sc,-14*sc, 0,-18*sc);
+    CTX.fill();
+    // Fire dots
+    CTX.fillStyle='#ffff80';
+    for(let i=0;i<3;i++){
+      CTX.beginPath();
+      CTX.arc(M.rnd(-4,4)*sc,(−8+i*8)*sc,1.5*sc,0,Math.PI*2);
+      CTX.fill();
     }
 
-    // ── Init Three.js and the game loop ──
-    const canvas = document.getElementById('game-canvas');
-    initEngine(canvas, gameState);
+  } else if(arch==='stormbringer'){
+    // Angular warrior with horns
+    // Horns
+    CTX.strokeStyle=ent.colour;
+    CTX.lineWidth=2*sc;
+    CTX.beginPath();
+    CTX.moveTo(-8*sc,-28*sc); CTX.lineTo(-14*sc,-40*sc);
+    CTX.moveTo(8*sc,-28*sc);  CTX.lineTo(14*sc,-40*sc);
+    CTX.stroke();
+    // Body
+    CTX.beginPath();
+    CTX.moveTo(0,-28*sc);
+    CTX.lineTo(14*sc,-10*sc);
+    CTX.lineTo(10*sc,15*sc);
+    CTX.lineTo(-10*sc,15*sc);
+    CTX.lineTo(-14*sc,-10*sc);
+    CTX.closePath();
+    CTX.fill();
 
-    // ── Init all UI event listeners ──
-    initUI(gameState);
+  } else if(arch==='shadowstep'){
+    // Nimble acrobat
+    // Body lean
+    CTX.beginPath();
+    CTX.moveTo(0,-32*sc);
+    CTX.lineTo(10*sc,-8*sc);
+    CTX.lineTo(6*sc,14*sc);
+    CTX.lineTo(-6*sc,14*sc);
+    CTX.lineTo(-10*sc,-8*sc);
+    CTX.closePath();
+    CTX.fill();
+    // Speed lines
+    CTX.strokeStyle=M.hex2rgba(ent.colour||'#00f5ff',0.4);
+    CTX.lineWidth=1*sc;
+    CTX.beginPath();
+    CTX.moveTo(-16*sc,0); CTX.lineTo(-8*sc,0);
+    CTX.moveTo(-16*sc,5*sc); CTX.lineTo(-6*sc,5*sc);
+    CTX.stroke();
 
-    // ── Show the HUD when the game screen is active ──
-    // We observe which screen is visible and toggle the HUD accordingly
-    const observer = new MutationObserver(() => {
-      const gameScreen = document.getElementById('game');
-      const hud        = document.getElementById('hud');
-      if (gameScreen && hud) {
-        const isGameVisible = gameScreen.style.display !== 'none';
-        hud.style.display   = isGameVisible ? 'block' : 'none';
+  } else {
+    // Generic — filled diamond
+    CTX.beginPath();
+    CTX.moveTo(0,-30*sc);
+    CTX.lineTo(12*sc,0);
+    CTX.lineTo(0,18*sc);
+    CTX.lineTo(-12*sc,0);
+    CTX.closePath();
+    CTX.fill();
+  }
+}
+
+// Colours and icons for status effects
+const STATUS_COLOURS={
+  burn:'#ff5014',freeze:'#00b4ff',stun:'#fff000',
+  poison:'#44ff44',slow:'#8888ff',invincible:'#ffffb4',shield:'#aaaaff',
+};
+const STATUS_EMOJI={
+  burn:'🔥',freeze:'❄',stun:'⚡',poison:'☠',slow:'🌀',invincible:'✨',shield:'🛡',
+};
+
+// Draw a projectile
+function drawProjectile(proj){
+  const s=ISO.worldToScreen(proj.x,proj.y);
+  const el=EL[proj.power.element]||EL.none;
+
+  CTX.save();
+  CTX.translate(s.x,s.y);
+
+  // Glow
+  CTX.shadowColor=el.hex;
+  CTX.shadowBlur=16;
+
+  if(proj.power.shape==='beam'){
+    // Beam: oriented line
+    const angle=Math.atan2(proj.vy,proj.vx);
+    CTX.rotate(angle);
+    CTX.fillStyle=el.hex;
+    CTX.fillRect(-12,-3,24,6);
+  } else {
+    // Default: glowing circle
+    CTX.fillStyle=el.hex;
+    CTX.beginPath();
+    CTX.arc(0,0,proj.size||4,0,Math.PI*2);
+    CTX.fill();
+    // Inner bright core
+    CTX.fillStyle='rgba(255,255,255,0.8)';
+    CTX.beginPath();
+    CTX.arc(0,0,(proj.size||4)*0.4,0,Math.PI*2);
+    CTX.fill();
+  }
+
+  CTX.shadowBlur=0;
+  CTX.restore();
+
+  // Trail particles (every other frame for perf)
+  if(Math.random()<0.4){
+    Particles.burst(s.x,s.y,el.hex,1,{
+      minSpeed:5,maxSpeed:20,minDecay:3,maxDecay:5,
+      minSize:1,maxSize:2,gravity:0,
+    });
+  }
+}
+
+// Draw an area effect (AoE ring)
+function drawAreaEffect(eff){
+  const s=ISO.worldToScreen(eff.x,eff.y);
+  const el=EL[eff.element]||EL.none;
+  const prog=1-(eff.timeLeft/eff.duration); // 0→1 progress
+
+  CTX.save();
+  CTX.translate(s.x,s.y);
+  CTX.globalAlpha=M.clamp(1-prog,0,0.7);
+  CTX.shadowColor=el.hex;
+  CTX.shadowBlur=20;
+
+  // Draw isometric ellipse for AoE radius on floor
+  const screenR=eff.radius*ISO.TILE_W*0.5;
+  CTX.strokeStyle=el.hex;
+  CTX.lineWidth=2;
+  CTX.beginPath();
+  CTX.ellipse(0,0,screenR,screenR*0.5,0,0,Math.PI*2);
+  CTX.stroke();
+
+  // Fill
+  CTX.globalAlpha=M.clamp((1-prog)*0.15,0,0.15);
+  CTX.fillStyle=el.hex;
+  CTX.beginPath();
+  CTX.ellipse(0,0,screenR,screenR*0.5,0,0,Math.PI*2);
+  CTX.fill();
+
+  CTX.globalAlpha=1;
+  CTX.shadowBlur=0;
+  CTX.restore();
+}
+
+// Main render frame — draws everything
+function renderFrame(){
+  // Clear canvas
+  CTX.clearRect(0,0,W,H);
+
+  // Draw cached floor
+  if(GS.floorCanvas) CTX.drawImage(GS.floorCanvas,0,0);
+
+  // Draw area effects below characters
+  for(const ef of GS.effects) drawAreaEffect(ef);
+
+  // Sort entities by y for correct isometric draw order (back-to-front)
+  const sorted=[...GS.entities].sort((a,b)=>a.y-b.y);
+  for(const e of sorted) drawCharacter(e);
+
+  // Draw projectiles
+  for(const p of GS.projectiles) drawProjectile(p);
+
+  // Draw particles (on top)
+  Particles.update(GS.dt);
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 6 ─ ENTITY FACTORY
+// Creates player and enemy entity objects
+// ═══════════════════════════════════════════════════════
+function createEntity(archId,x,y,isPlayer,level=1){
+  const arch=ARCHETYPES.find(a=>a.id===archId)||ARCHETYPES[0];
+  const lvlBonus=(level-1)*5; // +5 to each stat per level
+
+  return {
+    id:`e_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    archetype:archId,
+    isPlayer,
+    isDead:false,
+    canAct:true,
+
+    // World position (in grid units)
+    x,y,
+    // Velocity
+    vx:0,vy:0,
+
+    colour:arch.colour,
+    scale:1,
+    glowIntensity:isPlayer?12:6,
+
+    // Facing direction (for rendering)
+    facing:{x:1,y:0},
+
+    // Stats
+    stats:{
+      health:arch.stats.hp+lvlBonus,
+      maxHealth:arch.stats.hp+lvlBonus,
+      energy:arch.stats.energy,
+      maxEnergy:arch.stats.energy,
+      speed:arch.stats.speed,
+      jumpForce:arch.stats.jumpForce,
+      strength:arch.stats.str+Math.floor(lvlBonus*0.6),
+      defence:arch.stats.def+Math.floor(lvlBonus*0.4),
+      level,
+      experience:0,
+    },
+
+    // Powers (filled from loadout)
+    powers:isPlayer ? [...(GS.player?.powers||[])] : getEnemyPowers(archId,level),
+
+    // Slot cooldowns: index matches power slot
+    cooldowns:new Array(6).fill(0),
+
+    // Status effects array
+    statusEffects:[],
+
+    // Timers/flags
+    hitFlash:0,
+    invincibleTimer:0,
+    deathTime:null,
+    killCount:0,
+    totalDamageDealt:0,
+
+    // AI only
+    aiState:'idle',
+    aiTimer:0,
+    aiTarget:null,
+
+    // Hitbox radius (world units)
+    hitRadius:0.6,
+
+    // Physics
+    onGround:true,
+    speedMult:1,
+  };
+}
+
+// Pick appropriate powers for an enemy based on archetype
+function getEnemyPowers(archId,level){
+  const arch=ARCHETYPES.find(a=>a.id===archId)||ARCHETYPES[0];
+  const powers=arch.startPowers.map(id=>({...POWER_DB[id]}));
+  // High level enemies also get a shop power
+  if(level>=4){
+    const extra=['voidpull','chainlightning','earthquake'];
+    powers.push({...POWER_DB[extra[M.rndi(0,extra.length-1)]]});
+  }
+  return powers;
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 7 ─ PHYSICS & MOVEMENT
+// Handles entity movement, world bounds, collisions
+// ═══════════════════════════════════════════════════════
+
+// Arena bounds in world units
+const ARENA={minX:0.5,maxX:ISO.COLS-0.5,minY:0.5,maxY:ISO.ROWS-0.5};
+
+function physicsUpdate(dt){
+  for(const ent of GS.entities){
+    if(ent.isDead) continue;
+
+    // Decay hit flash
+    if(ent.hitFlash>0) ent.hitFlash=Math.max(0,ent.hitFlash-dt*4);
+
+    // Apply velocity with speed multiplier
+    const spd=ent.stats.speed*ent.speedMult;
+    ent.x+=ent.vx*spd*dt;
+    ent.y+=ent.vy*spd*dt;
+
+    // Apply drag — velocity decays each frame
+    ent.vx*=0.82;
+    ent.vy*=0.82;
+
+    // Clamp to arena bounds
+    ent.x=M.clamp(ent.x,ARENA.minX,ARENA.maxX);
+    ent.y=M.clamp(ent.y,ARENA.minY,ARENA.maxY);
+  }
+
+  // Move projectiles
+  const toRemove=[];
+  for(let i=0;i<GS.projectiles.length;i++){
+    const p=GS.projectiles[i];
+    p.x+=p.vx*dt;
+    p.y+=p.vy*dt;
+    p.dist+=Math.sqrt(p.vx**2+p.vy**2)*dt;
+    p.age+=dt;
+
+    // Remove if out of range or lived too long
+    if(p.dist>=p.power.range||p.age>6||
+       p.x<0||p.x>ISO.COLS||p.y<0||p.y>ISO.ROWS){
+      toRemove.push(i);
+    }
+  }
+  for(let i=toRemove.length-1;i>=0;i--) GS.projectiles.splice(toRemove[i],1);
+
+  // Tick area effects
+  const effRemove=[];
+  for(let i=0;i<GS.effects.length;i++){
+    GS.effects[i].timeLeft-=dt;
+    if(GS.effects[i].timeLeft<=0) effRemove.push(i);
+  }
+  for(let i=effRemove.length-1;i>=0;i--) GS.effects.splice(i,1);
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 8 ─ COMBAT SYSTEM
+// Damage, status effects, death, respawn
+// ═══════════════════════════════════════════════════════
+function dealDamage(target,amount,attacker,power){
+  if(!target||target.isDead||target.invincibleTimer>0) return 0;
+
+  // Check invincibility status effect
+  const inv=target.statusEffects.find(e=>e.type==='invincible');
+  if(inv) return 0;
+
+  // Defence reduction
+  let dmg=Math.max(1,amount-(target.stats.defence*0.5));
+  dmg=Math.round(dmg);
+
+  // Shield halves damage
+  const shield=target.statusEffects.find(e=>e.type==='shield');
+  if(shield) dmg=Math.ceil(dmg*0.5);
+
+  target.stats.health=Math.max(0,target.stats.health-dmg);
+  target.hitFlash=1; // flash white
+
+  // Track damage dealt
+  if(attacker){
+    attacker.totalDamageDealt=(attacker.totalDamageDealt||0)+dmg;
+  }
+
+  // Show floating damage number
+  showFloatNum(target,dmg,power?.element||'none');
+
+  // Particles on hit
+  const el=EL[power?.element||'none']||EL.none;
+  const s=ISO.worldToScreen(target.x,target.y);
+  Particles.burst(s.x,s.y-20,el.hex,8,{minSpeed:30,maxSpeed:80,minSize:2,maxSize:5});
+
+  // Apply on-hit effect
+  if(power?.onHit&&power.onHit!=='none'){
+    applyStatus(target,power.onHit,power.onHitDuration||2,power);
+  }
+
+  // Knockback
+  if(power?.knockback&&power.knockback>0&&attacker){
+    const dx=target.x-attacker.x, dy=target.y-attacker.y;
+    const n=M.norm(dx,dy);
+    target.vx+=n.x*(power.knockback*0.15);
+    target.vy+=n.y*(power.knockback*0.15);
+  }
+  // Pull (negative knockback)
+  if(power?.knockback&&power.knockback<0&&attacker){
+    const dx=attacker.x-target.x, dy=attacker.y-target.y;
+    const n=M.norm(dx,dy);
+    target.vx+=n.x*(Math.abs(power.knockback)*0.15);
+    target.vy+=n.y*(Math.abs(power.knockback)*0.15);
+  }
+
+  if(target.stats.health<=0) onDeath(target,attacker);
+  return dmg;
+}
+
+function applyStatus(target,type,duration,power){
+  // Remove existing effect of same type (refresh)
+  target.statusEffects=target.statusEffects.filter(e=>e.type!==type);
+
+  const ef={type,duration,timeLeft:duration,power};
+
+  if(type==='freeze')  target.speedMult=0;
+  if(type==='stun')    target.canAct=false;
+  if(type==='slow')    target.speedMult=0.35;
+  if(type==='invincible') target.invincibleTimer=duration;
+
+  target.statusEffects.push(ef);
+}
+
+function updateStatusEffects(dt){
+  for(const ent of GS.entities){
+    const expired=[];
+    for(const ef of ent.statusEffects){
+      ef.timeLeft-=dt;
+
+      // Burn: 6 damage per second
+      if(ef.type==='burn'){
+        ef.tickAccum=(ef.tickAccum||0)+dt;
+        if(ef.tickAccum>=0.5){
+          dealDamage(ent,3,null,{element:'fire'});
+          ef.tickAccum=0;
+        }
       }
-    });
-    // Observe all screen elements for display changes
-    document.querySelectorAll('.screen').forEach(el => {
-      observer.observe(el, { attributes: true, attributeFilter: ['style'] });
+
+      // Poison: 3 damage per second
+      if(ef.type==='poison'){
+        ef.tickAccum=(ef.tickAccum||0)+dt;
+        if(ef.tickAccum>=1){
+          dealDamage(ent,3,null,{element:'wind'});
+          ef.tickAccum=0;
+        }
+      }
+
+      if(ef.timeLeft<=0) expired.push(ef);
+    }
+
+    // Remove expired effects and restore state
+    for(const ef of expired){
+      ent.statusEffects=ent.statusEffects.filter(e=>e!==ef);
+      if(ef.type==='freeze'||ef.type==='slow') ent.speedMult=1;
+      if(ef.type==='stun') ent.canAct=true;
+    }
+
+    // Tick invincibility
+    if(ent.invincibleTimer>0){
+      ent.invincibleTimer=Math.max(0,ent.invincibleTimer-dt);
+    }
+  }
+}
+
+function onDeath(ent,killer){
+  ent.isDead=true;
+  ent.canAct=false;
+  ent.deathTime=Date.now();
+  ent.vx=0;ent.vy=0;
+  ent.statusEffects=[];
+  ent.speedMult=1;
+
+  // Big death explosion
+  const s=ISO.worldToScreen(ent.x,ent.y);
+  const el=EL.fire;
+  Particles.burst(s.x,s.y-20,el.hex,30,{minSpeed:60,maxSpeed:180,minSize:3,maxSize:8});
+  Particles.ring(s.x,s.y-10,ent.colour,20,40);
+
+  if(killer){
+    killer.killCount=(killer.killCount||0)+1;
+    addXP(killer,25+ent.stats.level*8);
+    if(!killer.isPlayer) GS.enemiesKilled++;
+  }
+
+  // Match condition check (defer to next tick)
+  setTimeout(()=>checkMatchConditions(),100);
+}
+
+function addXP(ent,amount){
+  ent.stats.experience+=amount;
+  const needed=100*ent.stats.level*1.5;
+  if(ent.stats.experience>=needed){
+    ent.stats.experience-=needed;
+    ent.stats.level++;
+    ent.stats.maxHealth+=10;
+    ent.stats.maxEnergy+=5;
+    ent.stats.strength+=2;
+    ent.stats.defence+=1;
+    if(ent.isPlayer){
+      toast(`Level Up! Now Lv.${ent.stats.level} 🎉`,'#ffc200');
+      ent.stats.health=ent.stats.maxHealth;
+      ent.stats.energy=ent.stats.maxEnergy;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 9 ─ POWER EXECUTION
+// Fires a power from an entity toward a target
+// ═══════════════════════════════════════════════════════
+function executePower(caster,slotIndex,targetX,targetY){
+  if(!caster||caster.isDead||!caster.canAct) return;
+
+  const power=caster.powers[slotIndex];
+  if(!power) return;
+
+  // Cooldown check
+  if(caster.cooldowns[slotIndex]>0) return;
+
+  // Energy check
+  if(caster.stats.energy<power.energyCost){
+    if(caster.isPlayer) toast('Not enough energy','#448aff');
+    return;
+  }
+
+  // Deduct energy and start cooldown
+  caster.stats.energy=Math.max(0,caster.stats.energy-power.energyCost);
+  caster.cooldowns[slotIndex]=power.cooldown;
+
+  const el=EL[power.element]||EL.none;
+  const s=ISO.worldToScreen(caster.x,caster.y);
+
+  // ── Execute by power type ──
+
+  if(power.type==='projectile'||power.type==='chain'){
+    // Direction from caster to target
+    const dx=targetX-caster.x, dy=targetY-caster.y;
+    const n=M.norm(dx,dy);
+    const speed=power.speed||14;
+
+    GS.projectiles.push({
+      x:caster.x+n.x*0.8,
+      y:caster.y+n.y*0.8,
+      vx:n.x*speed, vy:n.y*speed,
+      dist:0,age:0,
+      power:{...power},
+      owner:caster,
+      size:power.element==='fire'?6:power.element==='lightning'?4:5,
+      shape:power.type==='chain'?'beam':'sphere',
     });
 
-    console.log('DECIPHA engine initialised');
-    console.log('Files: cpg.js | pipeline.js | powers.js | physics.js | combat.js | ai.js | economy.js | renderer.js | engine.js | ui.js');
+    Particles.burst(s.x,s.y-20,el.hex,6,{minSpeed:40,maxSpeed:100,minSize:2,maxSize:4});
+  }
 
-  </script>
+  else if(power.type==='area'||power.type==='cone'){
+    // Instant area damage around caster
+    GS.effects.push({
+      x:caster.x,y:caster.y,
+      radius:power.aoeRadius,
+      element:power.element,
+      duration:power.duration||0.8,
+      timeLeft:power.duration||0.8,
+      power,owner:caster,
+    });
+
+    Particles.ring(s.x,s.y-10,el.hex,20,power.aoeRadius*ISO.TILE_W*0.5);
+
+    // Apply damage to all enemies in range
+    for(const ent of GS.entities){
+      if(ent===caster||ent.isDead||ent.isPlayer===caster.isPlayer) continue;
+      const d=M.dist(caster.x,caster.y,ent.x,ent.y);
+      if(d<=power.aoeRadius){
+        const falloff=1-(d/power.aoeRadius)*0.5; // damage falls off at edge
+        dealDamage(ent,Math.round(power.damage*falloff*caster.stats.strength/10),caster,power);
+      }
+    }
+  }
+
+  else if(power.type==='buff'){
+    // Self buff
+    if(power.id==='staticshield'||power.id==='smokeveil'){
+      applyStatus(caster,power.id==='smokeveil'?'invincible':'shield',power.duration,power);
+      if(power.id==='smokeveil') caster.speedMult=1.4;
+      Particles.ring(s.x,s.y-20,el.hex,24,25);
+    }
+    if(power.healing){
+      caster.stats.health=Math.min(caster.stats.maxHealth,caster.stats.health+(power.healing||0));
+      const healS=ISO.worldToScreen(caster.x,caster.y);
+      showFloatNum(caster,power.healing,'light',true);
+      Particles.burst(healS.x,healS.y-20,'#00e676',12,{minSpeed:20,maxSpeed:60,gravity:-30});
+    }
+  }
+
+  else if(power.type==='movement'){
+    // Blink — teleport toward target
+    const dx=targetX-caster.x, dy=targetY-caster.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    const blink=Math.min(power.range,dist);
+    const n=M.norm(dx,dy);
+
+    // Spawn afterimage particles at old position
+    Particles.burst(s.x,s.y-20,el.hex,16,{minSpeed:20,maxSpeed:60,minDecay:3,maxDecay:5});
+
+    // Move
+    caster.x=M.clamp(caster.x+n.x*blink,ARENA.minX,ARENA.maxX);
+    caster.y=M.clamp(caster.y+n.y*blink,ARENA.minY,ARENA.maxY);
+
+    // Damage enemies at landing position
+    for(const ent of GS.entities){
+      if(ent===caster||ent.isDead||ent.isPlayer===caster.isPlayer) continue;
+      if(M.dist(caster.x,caster.y,ent.x,ent.y)<=1.5){
+        dealDamage(ent,power.damage,caster,power);
+      }
+    }
+
+    // Arrival particles
+    const ns=ISO.worldToScreen(caster.x,caster.y);
+    Particles.burst(ns.x,ns.y-20,el.hex,16,{minSpeed:40,maxSpeed:100});
+  }
+}
+
+// Check projectile vs entity collisions each frame
+function checkProjectileCollisions(){
+  const toRemove=[];
+  for(let pi=0;pi<GS.projectiles.length;pi++){
+    const proj=GS.projectiles[pi];
+    for(const ent of GS.entities){
+      if(ent===proj.owner||ent.isDead) continue;
+      // Only hit opponents
+      if(ent.isPlayer===proj.owner.isPlayer) continue;
+
+      const d=M.dist(proj.x,proj.y,ent.x,ent.y);
+      if(d<ent.hitRadius+0.3){
+        dealDamage(ent,proj.power.damage*proj.owner.stats.strength/10,proj.owner,proj.power);
+        // AoE on impact
+        if(proj.power.aoeRadius>0){
+          GS.effects.push({
+            x:proj.x,y:proj.y,
+            radius:proj.power.aoeRadius,
+            element:proj.power.element,
+            duration:0.5,timeLeft:0.5,
+            power:proj.power,owner:proj.owner,
+          });
+          for(const ent2 of GS.entities){
+            if(ent2===proj.owner||ent2.isDead||ent2.isPlayer===proj.owner.isPlayer) continue;
+            const d2=M.dist(proj.x,proj.y,ent2.x,ent2.y);
+            if(d2<=proj.power.aoeRadius&&ent2!==ent){
+              dealDamage(ent2,Math.round(proj.power.damage*0.6),proj.owner,proj.power);
+            }
+          }
+        }
+        toRemove.push(pi);
+        break;
+      }
+    }
+  }
+  for(let i=toRemove.length-1;i>=0;i--) GS.projectiles.splice(toRemove[i],1);
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 10 ─ ENEMY AI
+// Behaviour tree: flee → power → chase → idle
+// ═══════════════════════════════════════════════════════
+function updateAI(enemy,dt){
+  if(enemy.isDead||!enemy.canAct) return;
+
+  enemy.aiTimer-=dt;
+  if(enemy.aiTimer>0) return; // throttle AI decisions
+  enemy.aiTimer=0.25+Math.random()*0.15; // think every 250-400ms
+
+  const player=GS.entities.find(e=>e.isPlayer&&!e.isDead);
+  if(!player){enemy.vx=0;enemy.vy=0;return}
+
+  const dx=player.x-enemy.x, dy=player.y-enemy.y;
+  const dist=M.dist(enemy.x,enemy.y,player.x,player.y);
+  enemy.aiTarget=player;
+
+  // ── Behaviour tree rules (top = highest priority) ──
+
+  // Rule 1: Flee at low health
+  if(enemy.stats.health<enemy.stats.maxHealth*0.2){
+    const n=M.norm(-dx,-dy); // run away
+    enemy.vx=n.x;enemy.vy=n.y;
+    enemy.aiState='flee';
+    return;
+  }
+
+  // Rule 2: Use best available power if in range
+  const bestPow=selectBestPower(enemy,player,dist);
+  if(bestPow!==null&&dist<(enemy.powers[bestPow]?.range||15)*1.5){
+    enemy.vx*=0.3;enemy.vy*=0.3; // slow down to aim
+    executePower(enemy,bestPow,player.x,player.y);
+    enemy.aiState='attack';
+    return;
+  }
+
+  // Rule 3: Chase — keep preferred distance based on powers
+  const hasMelee=enemy.powers.some(p=>p&&p.type==='melee');
+  const preferred=hasMelee ? 1.2 : 7;
+
+  if(dist>preferred+0.5){
+    const n=M.norm(dx,dy);
+    const speedFactor=dist>10?1:0.7;
+    enemy.vx=n.x*speedFactor;
+    enemy.vy=n.y*speedFactor;
+    enemy.aiState='chase';
+  } else if(dist<preferred-0.5){
+    const n=M.norm(-dx,-dy); // too close — back up
+    enemy.vx=n.x*0.5;enemy.vy=n.y*0.5;
+  } else {
+    enemy.vx*=0.5;enemy.vy*=0.5;
+    enemy.aiState='idle';
+  }
+}
+
+// Pick the power with the highest score for this situation
+function selectBestPower(enemy,target,dist){
+  let best=null,bestScore=-Infinity;
+  enemy.powers.forEach((p,i)=>{
+    if(!p||enemy.cooldowns[i]>0) return;
+    if(enemy.stats.energy<p.energyCost) return;
+
+    let score=p.damage;
+    if(p.type==='area'&&dist<p.aoeRadius*1.5) score+=20;
+    if(p.type==='melee'&&dist<3) score+=30;
+    if(p.onHit==='freeze') score+=10;
+    // Some randomness on easy to make AI imperfect
+    score+=M.rnd(-8,8);
+
+    if(score>bestScore){bestScore=score;best=i;}
+  });
+  return best;
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 11 ─ INPUT HANDLING
+// Keyboard and mouse → player actions
+// ═══════════════════════════════════════════════════════
+const Input = {
+  init(){
+    // Keyboard
+    document.addEventListener('keydown',e=>{
+      GS.keys[e.key.toLowerCase()]=true;
+      this.onKeyDown(e.key.toLowerCase());
+    });
+    document.addEventListener('keyup',e=>{
+      GS.keys[e.key.toLowerCase()]=false;
+    });
+    // Mouse
+    CVS.addEventListener('mousemove',e=>{
+      const r=CVS.getBoundingClientRect();
+      GS.mouse.x=e.clientX-r.left;
+      GS.mouse.y=e.clientY-r.top;
+      // Approximate world position from screen (isometric inverse)
+      // Simple approximation for mouse aiming
+      const sx=GS.mouse.x, sy=GS.mouse.y;
+      const dx=(sx-ISO.offX)/ISO.TILE_W;
+      const dy=(sy-ISO.offY)/ISO.TILE_H;
+      GS.mouse.world.x=dx+dy;
+      GS.mouse.world.y=dy-dx;
+    });
+    CVS.addEventListener('click',e=>{
+      if(!GS.matchActive) return;
+      const p=GS.entities.find(e=>e.isPlayer&&!e.isDead);
+      if(!p) return;
+      // Left click fires slot 0 (Q)
+      executePower(p,0,GS.mouse.world.x,GS.mouse.world.y);
+    });
+    // Touch support
+    CVS.addEventListener('touchstart',e=>{
+      e.preventDefault();
+      const t=e.touches[0];
+      const r=CVS.getBoundingClientRect();
+      GS.mouse.x=t.clientX-r.left;
+      GS.mouse.y=t.clientY-r.top;
+      const sx=GS.mouse.x, sy=GS.mouse.y;
+      const dx=(sx-ISO.offX)/ISO.TILE_W;
+      const dy=(sy-ISO.offY)/ISO.TILE_H;
+      GS.mouse.world.x=dx+dy;
+      GS.mouse.world.y=dy-dx;
+      const p=GS.entities.find(e=>e.isPlayer&&!e.isDead);
+      if(p) executePower(p,0,GS.mouse.world.x,GS.mouse.world.y);
+    },{passive:false});
+  },
+
+  onKeyDown(key){
+    if(!GS.matchActive) return;
+    const p=GS.entities.find(e=>e.isPlayer&&!e.isDead);
+    if(!p) return;
+
+    const slotMap={q:0,e:1,r:2,f:3,g:4,h:5};
+    const slot=slotMap[key];
+    if(slot!==undefined){
+      executePower(p,slot,GS.mouse.world.x,GS.mouse.world.y);
+    }
+  },
+
+  processMovement(){
+    if(!GS.matchActive) return;
+    const p=GS.entities.find(e=>e.isPlayer&&!e.isDead);
+    if(!p||!p.canAct) return;
+
+    let dx=0,dy=0;
+    if(GS.keys['w']||GS.keys['arrowup'])    dy-=1;
+    if(GS.keys['s']||GS.keys['arrowdown'])  dy+=1;
+    if(GS.keys['a']||GS.keys['arrowleft'])  dx-=1;
+    if(GS.keys['d']||GS.keys['arrowright']) dx+=1;
+
+    if(dx!==0||dy!==0){
+      const n=M.norm(dx,dy);
+      p.vx=n.x;p.vy=n.y;
+      p.facing=n;
+    }
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 12 ─ ENERGY REGENERATION
+// ═══════════════════════════════════════════════════════
+function regenEnergy(dt){
+  const REGEN=9; // energy per second
+  for(const ent of GS.entities){
+    if(ent.isDead) continue;
+    if(ent.stats.energy<ent.stats.maxEnergy){
+      ent.stats.energy=Math.min(ent.stats.maxEnergy,ent.stats.energy+REGEN*dt);
+    }
+  }
+}
+
+// Tick all power cooldowns
+function tickCooldowns(dt){
+  for(const ent of GS.entities){
+    for(let i=0;i<ent.cooldowns.length;i++){
+      if(ent.cooldowns[i]>0) ent.cooldowns[i]=Math.max(0,ent.cooldowns[i]-dt);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 13 ─ HUD UPDATE
+// Syncs DOM elements to current game state each frame
+// ═══════════════════════════════════════════════════════
+let hudSlotEls=[]; // cached slot DOM elements
+
+function buildHUDSlots(){
+  const container=document.getElementById('hud-slots');
+  container.innerHTML='';
+  hudSlotEls=[];
+  const slotKeys=['Q','E','R','F','G','H'];
+  const slots=GS.player?.powers?.length||3;
+
+  for(let i=0;i<Math.max(slots,3);i++){
+    const div=document.createElement('div');
+    div.className='hud-slot'+(i>=slots?' locked':'');
+    div.innerHTML=`
+      <span class="hud-slot-key">${slotKeys[i]}</span>
+      <span class="hud-slot-icon">${GS.player?.powers?.[i]?.icon||'—'}</span>
+      <span class="hud-slot-cd"></span>
+      <div class="hud-slot-overlay" style="transform:scaleY(0);transform-origin:top"></div>
+    `;
+    // Click to fire
+    const idx=i;
+    div.addEventListener('click',()=>{
+      const p=GS.entities.find(e=>e.isPlayer&&!e.isDead);
+      if(p) executePower(p,idx,GS.mouse.world.x,GS.mouse.world.y);
+    });
+    container.appendChild(div);
+    hudSlotEls.push(div);
+  }
+}
+
+function updateHUD(){
+  const p=GS.entities.find(e=>e.isPlayer);
+  if(!p) return;
+
+  // HP bar
+  const hpPct=M.clamp(p.stats.health/p.stats.maxHealth,0,1)*100;
+  document.getElementById('hud-hp-fill').style.width=hpPct+'%';
+  document.getElementById('hud-hp-num').textContent=
+    `${Math.ceil(p.stats.health)}/${p.stats.maxHealth}`;
+
+  // Energy bar
+  const enPct=M.clamp(p.stats.energy/p.stats.maxEnergy,0,1)*100;
+  document.getElementById('hud-en-fill').style.width=enPct+'%';
+  document.getElementById('hud-en-num').textContent=
+    `${Math.floor(p.stats.energy)}/${p.stats.maxEnergy}`;
+
+  // Power slots
+  for(let i=0;i<hudSlotEls.length;i++){
+    const el=hudSlotEls[i];
+    if(!el) continue;
+    const pow=p.powers[i];
+    const cd=p.cooldowns[i];
+
+    if(!pow){el.className='hud-slot locked';continue}
+
+    const ready=cd===0&&p.stats.energy>=pow.energyCost;
+    el.className='hud-slot'+(ready?' ready':'');
+
+    // Update icon
+    const iconEl=el.querySelector('.hud-slot-icon');
+    if(iconEl) iconEl.textContent=pow.icon||pow.emoji||'?';
+
+    // Cooldown overlay
+    const ov=el.querySelector('.hud-slot-overlay');
+    const cdText=el.querySelector('.hud-slot-cd');
+    if(cd>0){
+      const pct=M.clamp(cd/pow.cooldown,0,1);
+      if(ov) ov.style.transform=`scaleY(${pct})`;
+      if(cdText){cdText.textContent=cd.toFixed(1);cdText.style.display='block'}
+    } else {
+      if(ov) ov.style.transform='scaleY(0)';
+      if(cdText) cdText.style.display='none';
+    }
+  }
+
+  // Enemy bar
+  const enemy=GS.entities.find(e=>!e.isPlayer&&!e.isDead);
+  const enemyHUD=document.getElementById('hud-enemy');
+  if(enemy){
+    enemyHUD.classList.add('active');
+    document.getElementById('hud-enemy-name').textContent=
+      `${enemy.archetype.toUpperCase()} — LV.${enemy.stats.level}`;
+    const ePct=M.clamp(enemy.stats.health/enemy.stats.maxHealth,0,1)*100;
+    document.getElementById('hud-enemy-fill').style.width=ePct+'%';
+  } else {
+    enemyHUD.classList.remove('active');
+  }
+
+  // Info
+  document.getElementById('hud-coins-live').textContent=
+    `⬡ ${GS.player?.wallet?.coins||0}`;
+
+  if(GS.matchMode==='survival'){
+    document.getElementById('hud-wave').textContent=
+      `WAVE ${GS.waveNumber} · ${GS.enemiesKilled} kills`;
+  }
+
+  // Status effects on player
+  const statusDiv=document.getElementById('hud-status');
+  statusDiv.innerHTML='';
+  for(const ef of p.statusEffects){
+    const badge=document.createElement('div');
+    badge.className='status-badge';
+    badge.style.background=M.hex2rgba(STATUS_COLOURS[ef.type]||'#fff',0.2);
+    badge.style.borderLeft=`2px solid ${STATUS_COLOURS[ef.type]||'#fff'}`;
+    badge.style.color=STATUS_COLOURS[ef.type]||'#fff';
+    badge.textContent=`${STATUS_EMOJI[ef.type]||'●'} ${ef.timeLeft.toFixed(1)}s`;
+    statusDiv.appendChild(badge);
+  }
+}
+
+// Show a floating damage number over an entity
+function showFloatNum(ent,amount,element,isHeal=false){
+  const s=ISO.worldToScreen(ent.x,ent.y);
+  const el=document.getElementById('hud-floats');
+  const div=document.createElement('div');
+  div.className='float-num';
+  div.style.left=(s.x-16)+'px';
+  div.style.top=(s.y-50)+'px';
+  div.style.color=isHeal?'#00e676':(EL[element]?.hex||'#fff');
+  div.textContent=isHeal?`+${amount}`:`-${amount}`;
+  el.appendChild(div);
+  setTimeout(()=>div.remove(),950);
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 14 ─ MATCH LOGIC
+// Start, tick, end matches
+// ═══════════════════════════════════════════════════════
+const Game = {
+  confirmCreate(){
+    const archId=GS.selectedArchetype;
+    if(!archId){toast('Pick an archetype first!','#ff1744');return}
+    const name=document.getElementById('avatar-name-input').value.trim()||'Warrior';
+
+    // Get arch start powers
+    const arch=ARCHETYPES.find(a=>a.id===archId);
+    const startPowers=arch.startPowers.map(id=>({...POWER_DB[id]}));
+    // Fill to 3 slots
+    while(startPowers.length<3) startPowers.push(null);
+
+    GS.player={
+      id:`player_${Date.now()}`,
+      name,
+      archetype:archId,
+      powers:startPowers,
+      unlockedPowers:[...startPowers.filter(Boolean)],
+      wallet:{coins:0,gems:0,purchases:[]},
+      stats:{level:1,experience:0},
+      slotCount:3,
+      cosmetic:null,
+    };
+
+    save();
+    UI.show('screen-menu');
+    document.getElementById('btn-continue').style.display='block';
+    toast(`Avatar created! Welcome, ${name}!`,'#00f5ff');
+  },
+
+  startMatch(mode){
+    if(!GS.player){toast('Create an avatar first!','#ff1744');return}
+
+    GS.matchMode=mode;
+    GS.matchActive=true;
+    GS.matchTimer=0;
+    GS.waveNumber=0;
+    GS.enemiesKilled=0;
+    GS.entities=[];
+    GS.projectiles=[];
+    GS.particles=[];
+    GS.effects=[];
+
+    // Spawn player
+    const p=createEntity(GS.player.archetype,3,ISO.ROWS/2,true);
+    p.powers=[...GS.player.powers];
+    p.cooldowns=new Array(p.powers.length).fill(0);
+    GS.entities.push(p);
+
+    if(mode==='arena'){
+      GS.playerLives=3;
+      GS.enemyLives=3;
+      this.spawnEnemy(1);
+    } else {
+      GS.playerLives=1;
+      this.spawnWave(1);
+    }
+
+    buildHUDSlots();
+    document.getElementById('hud').classList.add('active');
+    UI.show('game-canvas'); // hide screens, show canvas
+    // Actually just hide all screens
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  },
+
+  spawnEnemy(level){
+    const archs=ARCHETYPES.map(a=>a.id);
+    const archId=archs[M.rndi(0,archs.length-1)];
+    const e=createEntity(archId,ISO.COLS-3,ISO.ROWS/2,false,level);
+    e.x=ISO.COLS-3+M.rnd(-1,1);
+    e.y=ISO.ROWS/2+M.rnd(-2,2);
+    GS.entities.push(e);
+  },
+
+  spawnWave(wave){
+    GS.waveNumber=wave;
+    const count=2+wave;
+    const level=Math.max(1,wave);
+    for(let i=0;i<count;i++){
+      setTimeout(()=>{
+        this.spawnEnemy(level);
+      },i*600);
+    }
+    toast(`WAVE ${wave} — ${count} enemies!`,'#ff1744');
+  },
+
+  respawnPlayer(){
+    const old=GS.entities.find(e=>e.isPlayer);
+    if(old) GS.entities=GS.entities.filter(e=>e!==old);
+
+    const p=createEntity(GS.player.archetype,3,ISO.ROWS/2,true);
+    p.powers=[...GS.player.powers];
+    p.cooldowns=new Array(p.powers.length).fill(0);
+    p.invincibleTimer=2; // 2s invincibility on respawn
+    applyStatus(p,'invincible',2);
+    GS.entities.push(p);
+    buildHUDSlots();
+  },
+
+  tick(dt){
+    if(!GS.matchActive) return;
+
+    GS.matchTimer+=dt;
+
+    Input.processMovement();
+
+    // Update AI for all enemies
+    for(const ent of GS.entities){
+      if(!ent.isPlayer&&!ent.isDead) updateAI(ent,dt);
+    }
+
+    physicsUpdate(dt);
+    checkProjectileCollisions();
+    updateStatusEffects(dt);
+    regenEnergy(dt);
+    tickCooldowns(dt);
+    updateHUD();
+  },
+};
+
+function checkMatchConditions(){
+  if(!GS.matchActive) return;
+
+  const player=GS.entities.find(e=>e.isPlayer);
+  const enemies=GS.entities.filter(e=>!e.isPlayer);
+
+  if(GS.matchMode==='arena'){
+    if(player?.isDead){
+      GS.playerLives--;
+      if(GS.playerLives<=0){
+        endMatch(false);
+      } else {
+        toast(`${GS.playerLives} lives left…`,EL.fire.hex);
+        setTimeout(()=>Game.respawnPlayer(),2000);
+      }
+    }
+    const liveEnemies=enemies.filter(e=>!e.isDead);
+    if(liveEnemies.length===0){
+      GS.enemyLives--;
+      if(GS.enemyLives<=0){
+        endMatch(true);
+      } else {
+        toast(`Enemy lives: ${GS.enemyLives}`,EL.lightning.hex);
+        const lvl=Math.ceil(GS.matchTimer/20)+1;
+        setTimeout(()=>Game.spawnEnemy(lvl),1500);
+      }
+    }
+  }
+
+  else if(GS.matchMode==='survival'){
+    if(player?.isDead){endMatch(false);return}
+    const liveEnemies=enemies.filter(e=>!e.isDead);
+    if(liveEnemies.length===0){
+      const nextWave=GS.waveNumber+1;
+      setTimeout(()=>Game.spawnWave(nextWave),2000);
+    }
+  }
+}
+
+function endMatch(won){
+  GS.matchActive=false;
+  document.getElementById('hud').classList.remove('active');
+
+  const player=GS.entities.find(e=>e.isPlayer);
+  const kills=player?.killCount||0;
+  const dmg=player?.totalDamageDealt||0;
+  const baseCoins=won?100:20;
+  const killCoins=kills*10;
+  const survivalBonus=GS.matchMode==='survival'?GS.waveNumber*30:0;
+  const total=baseCoins+killCoins+survivalBonus;
+
+  if(GS.player) GS.player.wallet.coins+=total;
+  save();
+
+  // Build result screen
+  const titleEl=document.getElementById('result-title');
+  titleEl.textContent=won?'VICTORY':'DEFEATED';
+  titleEl.style.color=won?'#00e676':'#ff1744';
+  titleEl.style.textShadow=won?'0 0 40px rgba(0,230,118,.5)':'0 0 40px rgba(255,23,68,.5)';
+
+  const rows=[
+    {label:won?'Victory Bonus':'Participation',val:`+${baseCoins} ⬡`},
+    {label:`${kills} Kill${kills!==1?'s':''}`,val:`+${killCoins} ⬡`},
+  ];
+  if(survivalBonus) rows.push({label:`Wave ${GS.waveNumber} Bonus`,val:`+${survivalBonus} ⬡`});
+  rows.push({label:'TOTAL',val:`+${total} ⬡`});
+  rows.push({label:'Damage Dealt',val:dmg});
+  if(GS.matchMode==='survival') rows.push({label:'Waves Cleared',val:GS.waveNumber});
+
+  document.getElementById('result-rewards').innerHTML=
+    rows.map(r=>`<div class="result-row"><span>${r.label}</span><span class="result-val">${r.val}</span></div>`).join('');
+
+  UI.show('screen-result');
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 15 ─ AI POWER CREATION
+// Parses a plain-text description into a balanced power
+// ═══════════════════════════════════════════════════════
+const PowerCreator = {
+  generate(prompt,level=1){
+    const lower=prompt.toLowerCase();
+
+    // Detect element
+    let element='none';
+    if(/fire|flame|burn|blaze|inferno/.test(lower)) element='fire';
+    else if(/ice|freeze|frost|cold|cryo/.test(lower)) element='water';
+    else if(/lightning|storm|thunder|shock|electric/.test(lower)) element='lightning';
+    else if(/dark|shadow|void|null|death/.test(lower)) element='dark';
+    else if(/light|holy|divine|radiant|heal/.test(lower)) element='light';
+    else if(/wind|gale|air|tornado|cyclone/.test(lower)) element='wind';
+    else if(/earth|rock|stone|ground|quake/.test(lower)) element='earth';
+
+    // Detect type
+    let type='projectile';
+    if(/shoot|blast|throw|launch|fire|bolt/.test(lower)) type='projectile';
+    else if(/area|explode|wave|nova|pulse|surround|all enemies/.test(lower)) type='area';
+    else if(/shield|protect|absorb|buff|aura|barrier/.test(lower)) type='buff';
+    else if(/dash|blink|teleport|rush|charge/.test(lower)) type='movement';
+    else if(/cone|sweep|fan/.test(lower)) type='cone';
+
+    // Detect onHit
+    let onHit='none';
+    if(/burn|fire|flame/.test(lower)) onHit='burn';
+    else if(/freeze|ice|frost/.test(lower)) onHit='freeze';
+    else if(/stun|paralyze|stop/.test(lower)) onHit='stun';
+    else if(/poison|toxic|venom/.test(lower)) onHit='poison';
+    else if(/slow|drag/.test(lower)) onHit='slow';
+
+    // Extract numbers
+    const nums=[...lower.matchAll(/\b(\d+)\b/g)].map(m=>+m[1]);
+    const damageNum=nums.find(n=>n>=5&&n<=200)||null;
+    const durationNum=nums.find(n=>n>=1&&n<=10)||null;
+
+    // Build raw stats
+    const baseDmg={projectile:28,area:38,buff:0,movement:14,cone:42};
+    let damage=damageNum||baseDmg[type]||28;
+    let healing=0;
+
+    if(/heal|restore|regen/.test(lower)){
+      healing=damageNum||30;damage=0;type='buff';
+    }
+
+    // Shape
+    let shape='sphere';
+    if(/beam|ray/.test(lower)) shape='beam';
+    else if(/wave/.test(lower)) shape='wave';
+
+    const power={
+      id:`custom_${Date.now()}`,
+      name:this.generateName(element,type,onHit),
+      element,type,
+      icon:POWER_ICONS[element]||'💫',
+      emoji:POWER_ICONS[element]||'💫',
+      energyCost:Math.round(15+damage/3),
+      cooldown:parseFloat((1+damage/20).toFixed(1)),
+      damage,healing,
+      range:type==='projectile'?18:type==='movement'?12:0,
+      aoeRadius:type==='area'?6:type==='cone'?4:0,
+      duration:durationNum||2,
+      speed:type==='projectile'?14:0,
+      onHit,onHitDuration:durationNum||2,
+      knockback:5,
+      shape,
+      desc:prompt,
+      cost:0,unlocked:true,isCustom:true,
+    };
+
+    return this.balance(power,level);
+  },
+
+  balance(p,level){
+    const maxDmg=20+level*7;
+    p.damage=M.clamp(p.damage,5,maxDmg);
+    p.healing=M.clamp(p.healing||0,0,level*12);
+    p.energyCost=M.clamp(p.energyCost,8,60);
+    p.cooldown=M.clamp(p.cooldown,0.5,15);
+    p.aoeRadius=M.clamp(p.aoeRadius,0,9);
+    if(p.damage>maxDmg*0.75){p.energyCost=Math.round(p.energyCost*1.3);p.cooldown=parseFloat((p.cooldown*1.3).toFixed(1));}
+    return p;
+  },
+
+  generateName(element,type,onHit){
+    const pre={fire:['Inferno','Blaze','Ember','Pyro'],water:['Cryo','Glacial','Frost','Polar'],
+      lightning:['Thunder','Volt','Arc','Storm'],dark:['Void','Shadow','Null','Abyss'],
+      light:['Radiant','Solar','Astral','Holy'],wind:['Gale','Cyclone','Zephyr','Tempest'],
+      earth:['Terra','Quake','Stone','Granite'],none:['Force','Impact','Energy','Pulse']};
+    const suf={projectile:['Bolt','Shot','Strike','Lance'],area:['Nova','Burst','Surge','Wave'],
+      buff:['Aura','Ward','Veil','Shell'],movement:['Dash','Rush','Blitz','Lunge'],cone:['Blast','Sweep','Cone','Fan']};
+    const pArr=pre[element]||pre.none;
+    const sArr=suf[type]||suf.projectile;
+    return pArr[M.rndi(0,pArr.length-1)]+' '+sArr[M.rndi(0,sArr.length-1)];
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 16 ─ ECONOMY & SHOP
+// ═══════════════════════════════════════════════════════
+const Economy = {
+  buy(itemId){
+    if(!GS.player){toast('Create an avatar first!','#ff1744');return}
+
+    // Find item in catalogue
+    let item=null;
+    item=item||SHOP.slots.find(s=>s.id===itemId);
+    item=item||SHOP.powers.map(id=>({...POWER_DB[id],id})).find(p=>p.id===itemId);
+    item=item||SHOP.services.find(s=>s.id===itemId);
+    item=item||SHOP.cosmetics.find(c=>c.id===itemId);
+    if(!item){toast('Item not found','#ff1744');return}
+
+    // Already owned?
+    if(GS.player.wallet.purchases.includes(itemId)){toast('Already owned','#ff1744');return}
+
+    // Prerequisite
+    if(item.requires&&!GS.player.wallet.purchases.includes(item.requires)){
+      toast(`Unlock ${item.requires} first`,'#ff1744');return
+    }
+
+    // Afford?
+    if((GS.player.wallet.coins||0)<item.cost){
+      toast(`Need ${item.cost} coins (have ${GS.player.wallet.coins})`,'#ff1744');return
+    }
+
+    // Deduct
+    GS.player.wallet.coins-=item.cost;
+    GS.player.wallet.purchases.push(itemId);
+
+    // Apply effect
+    if(item.id.startsWith('slot_')){
+      GS.player.slotCount=item.slotCount;
+      while(GS.player.powers.length<item.slotCount) GS.player.powers.push(null);
+      toast(`${item.name} unlocked!`,'#00f5ff');
+    } else if(SHOP.powers.includes(itemId)){
+      const power={...POWER_DB[itemId],unlocked:true};
+      GS.player.unlockedPowers.push(power);
+      toast(`${power.name} added to your powers!`,'#a000ff');
+    } else if(itemId==='ai_power'){
+      UI.openAIPower();
+    } else if(item.type==='cosmetic'){
+      GS.player.cosmetic=item.id;
+      toast(`${item.name} equipped!`,'#ffc200');
+    }
+
+    save();
+    UI.buildShop();
+    document.getElementById('shop-coins-disp').textContent=`⬡ ${GS.player.wallet.coins}`;
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 17 ─ UI SYSTEM
+// Screen navigation, shop building, power management
+// ═══════════════════════════════════════════════════════
+const UI = {
+  show(id){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    const t=document.getElementById(id);
+    if(t) t.classList.add('active');
+
+    // Side effects
+    if(id==='screen-shop') this.buildShop();
+    if(id==='screen-powers') this.buildPowers();
+    if(id==='screen-create') this.buildArchetypes();
+    if(id==='screen-shop'&&GS.player){
+      document.getElementById('shop-coins-disp').textContent=`⬡ ${GS.player?.wallet?.coins||0}`;
+    }
+  },
+
+  buildArchetypes(){
+    const grid=document.getElementById('archetype-grid');
+    grid.innerHTML='';
+    for(const arch of ARCHETYPES){
+      const card=document.createElement('div');
+      card.className='archetype-card'+(GS.selectedArchetype===arch.id?' selected':'');
+      card.innerHTML=`
+        <div class="archetype-svg-wrap">
+          ${this.archSVG(arch)}
+        </div>
+        <div class="archetype-name" style="color:${arch.colour}">${arch.name}</div>
+        <div class="archetype-desc">${arch.desc}</div>
+        <div class="archetype-stats">
+          <span class="stat-pip${arch.stats.hp>=90?' high':''}">HP ${arch.stats.hp}</span>
+          <span class="stat-pip${arch.stats.speed>=6?' high':''}">SPD ${arch.stats.speed}</span>
+          <span class="stat-pip${arch.stats.str>=12?' high':''}">STR ${arch.stats.str}</span>
+          <span class="stat-pip${arch.stats.def>=5?' high':''}">DEF ${arch.stats.def}</span>
+        </div>
+      `;
+      card.addEventListener('click',()=>{
+        GS.selectedArchetype=arch.id;
+        this.buildArchetypes(); // rebuild to update selection
+      });
+      grid.appendChild(card);
+    }
+  },
+
+  // Generate an inline SVG for each archetype card
+  archSVG(arch){
+    const icons={
+      voidblade:`<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+        <defs><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        <polygon points="40,8 52,32 50,32 50,68 40,76 30,68 30,32 28,32" fill="${arch.colour}" opacity="0.9" filter="url(#glow)"/>
+        <line x1="40" y1="8" x2="55" y2="24" stroke="${arch.svgAccent}" stroke-width="2" opacity="0.7"/>
+        <circle cx="40" cy="44" r="4" fill="${arch.svgAccent}" opacity="0.8"/>
+      </svg>`,
+      pyromancer:`<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="40,4 50,24 70,18 56,34 74,42 52,46 60,62 40,52 20,62 28,46 6,42 24,34 10,18 30,24" fill="${arch.colour}" opacity="0.9"/>
+        <circle cx="40" cy="44" r="5" fill="${arch.svgAccent}" opacity="0.8"/>
+        <circle cx="30" cy="38" r="2" fill="#fff" opacity="0.6"/>
+        <circle cx="50" cy="38" r="2" fill="#fff" opacity="0.6"/>
+      </svg>`,
+      stormbringer:`<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="40,10 54,28 68,30 56,44 60,60 40,52 20,60 24,44 12,30 26,28" fill="${arch.colour}" opacity="0.9"/>
+        <line x1="28" y1="20" x2="18" y2="4" stroke="${arch.svgAccent}" stroke-width="2.5"/>
+        <line x1="52" y1="20" x2="62" y2="4" stroke="${arch.svgAccent}" stroke-width="2.5"/>
+        <polyline points="30,40 40,28 50,40" fill="none" stroke="${arch.svgAccent}" stroke-width="1.5" opacity="0.8"/>
+      </svg>`,
+      shadowstep:`<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="40,8 54,24 60,22 50,36 56,50 40,44 24,50 30,36 20,22 26,24" fill="${arch.colour}" opacity="0.9"/>
+        <line x1="6" y1="36" x2="20" y2="36" stroke="${arch.svgAccent}" stroke-width="1.5" opacity="0.6"/>
+        <line x1="6" y1="42" x2="18" y2="42" stroke="${arch.svgAccent}" stroke-width="1.5" opacity="0.4"/>
+        <line x1="6" y1="48" x2="16" y2="48" stroke="${arch.svgAccent}" stroke-width="1.5" opacity="0.2"/>
+        <circle cx="40" cy="36" r="3" fill="${arch.svgAccent}" opacity="0.9"/>
+      </svg>`,
+    };
+    return icons[arch.id]||icons.voidblade;
+  },
+
+  buildPowers(){
+    if(!GS.player){
+      document.getElementById('loadout-slots').innerHTML='<p style="color:var(--dim);font-size:13px">Create an avatar first.</p>';
+      document.getElementById('powers-library').innerHTML='';
+      return;
+    }
+
+    // Build loadout slots
+    const slotsEl=document.getElementById('loadout-slots');
+    slotsEl.innerHTML='';
+    const keys=['Q','E','R','F','G','H'];
+    const slotCount=GS.player.slotCount||3;
+
+    for(let i=0;i<slotCount;i++){
+      const pow=GS.player.powers[i];
+      const el=document.createElement('div');
+      el.className='power-slot-row'+(pow?' filled':'');
+      const el2=EL[pow?.element||'none']||EL.none;
+      el.innerHTML=`
+        <span class="slot-key">${keys[i]}</span>
+        <span class="slot-icon" style="background:${pow?M.hex2rgba(el2.hex,0.2):'var(--border)'}">
+          ${pow?.icon||pow?.emoji||'—'}
+        </span>
+        <div class="slot-info">
+          ${pow?`<div class="slot-name">${pow.name}</div>
+                 <div class="slot-meta">${pow.energyCost}en · ${pow.cooldown}s cd · DMG ${pow.damage||'-'}</div>`
+               :`<div class="slot-empty">EMPTY SLOT</div>`}
+        </div>
+        ${pow?`<span class="slot-remove" data-slot="${i}" title="Remove">×</span>`:''}
+      `;
+      // Remove button
+      if(pow){
+        el.querySelector('.slot-remove').addEventListener('click',e=>{
+          e.stopPropagation();
+          GS.player.powers[i]=null;
+          save();this.buildPowers();
+        });
+      }
+      slotsEl.appendChild(el);
+    }
+
+    // Build library
+    const libEl=document.getElementById('powers-library');
+    libEl.innerHTML='';
+    const allPowers=GS.player.unlockedPowers||[];
+    if(allPowers.length===0){
+      libEl.innerHTML='<p style="color:var(--dim);font-size:12px">No powers yet. Visit the Shop or create one with AI!</p>';
+      return;
+    }
+
+    for(const pow of allPowers){
+      const el2=EL[pow.element]||EL.none;
+      const div=document.createElement('div');
+      div.className='lib-power';
+      div.innerHTML=`
+        <div class="lib-power-top">
+          <span class="lib-power-icon">${pow.icon||pow.emoji}</span>
+          <span class="lib-power-name" style="color:${el2.hex}">${pow.name}</span>
+          <span class="lib-power-cost">${pow.energyCost}en</span>
+        </div>
+        <div class="lib-power-meta">${pow.type} · ${pow.element} · DMG ${pow.damage||0} · CD ${pow.cooldown}s${pow.onHit&&pow.onHit!=='none'?' · '+pow.onHit:''}</div>
+      `;
+      div.addEventListener('click',()=>{
+        // Assign to first empty slot
+        const emptySlot=GS.player.powers.findIndex((p,i)=>p===null&&i<slotCount);
+        if(emptySlot===-1){
+          // Ask which slot to replace
+          const slots=GS.player.powers.slice(0,slotCount).map((p,i)=>`${i+1}: ${p?.name||'empty'}`).join('\n');
+          const num=parseInt(prompt(`Replace which slot?\n${slots}`))-1;
+          if(isNaN(num)||num<0||num>=slotCount) return;
+          GS.player.powers[num]=pow;
+        } else {
+          GS.player.powers[emptySlot]=pow;
+        }
+        save();this.buildPowers();
+        toast(`${pow.name} assigned!`,el2.hex);
+      });
+      libEl.appendChild(div);
+    }
+  },
+
+  buildShop(){
+    const grid=document.getElementById('shop-grid');
+    grid.innerHTML='';
+
+    const owned=GS.player?.wallet?.purchases||[];
+    const coins=GS.player?.wallet?.coins||0;
+
+    const addSection=(title)=>{
+      const s=document.createElement('div');
+      s.className='shop-section';
+      s.textContent=title;
+      grid.appendChild(s);
+    };
+
+    const addCard=(item)=>{
+      const isOwned=owned.includes(item.id);
+      const canAfford=(item.cost||0)<=coins;
+      const card=document.createElement('div');
+      card.className='shop-card'+(isOwned?' owned':'');
+      const el2=item.element?EL[item.element]:null;
+      card.innerHTML=`
+        <div class="shop-card-icon">${item.icon||item.emoji||'?'}</div>
+        <div class="shop-card-name" ${el2?`style="color:${el2.hex}"`:''}>${item.name}</div>
+        <div class="shop-card-desc">${item.desc||item.description||''}</div>
+        ${item.damage?`<div class="shop-card-desc" style="font-family:var(--mono);font-size:10px">DMG ${item.damage} · ${item.energyCost}en · CD ${item.cooldown}s${item.onHit&&item.onHit!=='none'?' · '+item.onHit:''}</div>`:''}
+        <div class="shop-card-cost ${item.cost===0?'free':''}">${item.cost===0?'FREE':`⬡ ${item.cost}`}</div>
+        <button class="btn sm ${canAfford&&!isOwned?'primary':''}"
+          ${isOwned||!canAfford?'disabled':''} data-buy="${item.id}">
+          ${isOwned?'OWNED':canAfford?'PURCHASE':'NEED MORE ⬡'}
+        </button>
+      `;
+      card.querySelector('[data-buy]')?.addEventListener('click',()=>Economy.buy(item.id));
+      grid.appendChild(card);
+    };
+
+    addSection('⬡ POWER SLOTS');
+    SHOP.slots.forEach(addCard);
+
+    addSection('⚡ POWERS');
+    SHOP.powers.forEach(id=>{
+      const p=POWER_DB[id];
+      if(p) addCard({...p,id});
+    });
+
+    addSection('✦ AI SERVICES');
+    SHOP.services.forEach(addCard);
+
+    addSection('🎨 COSMETICS');
+    SHOP.cosmetics.forEach(addCard);
+  },
+
+  openAIPower(){
+    if(!GS.player){toast('Create an avatar first!','#ff1744');return}
+    document.getElementById('ai-power-preview').textContent='// Your power will appear here…';
+    document.getElementById('btn-keep-power').style.display='none';
+    document.getElementById('ai-power-input').value='';
+    document.getElementById('dialog-aipower').classList.add('open');
+  },
+
+  closeAIPower(){
+    document.getElementById('dialog-aipower').classList.remove('open');
+    GS.pendingAIPower=null;
+  },
+
+  generateAIPower(){
+    if(!GS.player) return;
+    const prompt=document.getElementById('ai-power-input').value.trim();
+    if(!prompt){toast('Describe your power first!','#ff1744');return}
+
+    const level=GS.player.stats?.level||1;
+    const power=PowerCreator.generate(prompt,level);
+    GS.pendingAIPower=power;
+
+    const el2=EL[power.element]||EL.none;
+    document.getElementById('ai-power-preview').innerHTML=
+      `<span style="color:${el2.hex};font-weight:700">${power.icon} ${power.name}</span>\n`+
+      `Type: ${power.type} | Element: ${power.element}\n`+
+      `Damage: ${power.damage} | Energy: ${power.energyCost} | CD: ${power.cooldown}s\n`+
+      (power.healing?`Healing: ${power.healing}\n`:'')+
+      (power.onHit&&power.onHit!=='none'?`On-Hit: ${power.onHit} for ${power.onHitDuration}s\n`:'')+
+      (power.aoeRadius?`AoE Radius: ${power.aoeRadius}\n`:'')+
+      `\n"${prompt}"`;
+
+    document.getElementById('btn-keep-power').style.display='block';
+  },
+
+  keepAIPower(){
+    if(!GS.player||!GS.pendingAIPower) return;
+    if(!GS.player.unlockedPowers) GS.player.unlockedPowers=[];
+    GS.player.unlockedPowers.push({...GS.pendingAIPower});
+    save();
+    this.closeAIPower();
+    toast(`"${GS.pendingAIPower.name}" added to your powers!`,'#a000ff');
+    this.buildPowers();
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 18 ─ PERSISTENCE (localStorage)
+// ═══════════════════════════════════════════════════════
+function save(){
+  if(!GS.player) return;
+  try{
+    localStorage.setItem('decipha_player',JSON.stringify({
+      id:GS.player.id,
+      name:GS.player.name,
+      archetype:GS.player.archetype,
+      powers:GS.player.powers,
+      unlockedPowers:GS.player.unlockedPowers,
+      wallet:GS.player.wallet,
+      stats:GS.player.stats,
+      slotCount:GS.player.slotCount,
+      cosmetic:GS.player.cosmetic,
+    }));
+  } catch(e){}
+}
+
+function load(){
+  try{
+    const raw=localStorage.getItem('decipha_player');
+    if(!raw) return null;
+    return JSON.parse(raw);
+  } catch(e){return null}
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 19 ─ TOAST NOTIFICATIONS
+// ═══════════════════════════════════════════════════════
+function toast(msg,colour='#00f5ff'){
+  const c=document.getElementById('toast-container');
+  const t=document.createElement('div');
+  t.className='toast';
+  t.style.color=colour;
+  t.style.borderColor=M.hex2rgba(colour,0.3);
+  t.textContent=msg;
+  c.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),400)},2800);
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 20 ─ MAIN LOOP & BOOT
+// ═══════════════════════════════════════════════════════
+function mainLoop(ts){
+  requestAnimationFrame(mainLoop);
+
+  // Delta time capped at 50ms to prevent jumps
+  GS.dt=Math.min((ts-GS.lastTime)/1000,0.05);
+  GS.lastTime=ts;
+
+  // Always render the floor + any active entities
+  renderFrame();
+
+  // Game logic only when match is active
+  if(GS.matchActive) Game.tick(GS.dt);
+}
+
+// Boot everything
+(function Boot(){
+  CVS=document.getElementById('game-canvas');
+  CTX=CVS.getContext('2d');
+
+  function resize(){
+    W=CVS.width=window.innerWidth;
+    H=CVS.height=window.innerHeight;
+    buildFloor(); // rebuild floor on resize
+  }
+  window.addEventListener('resize',resize);
+  resize();
+
+  Input.init();
+
+  // Try to load existing player
+  const saved=load();
+  if(saved){
+    GS.player=saved;
+    document.getElementById('btn-continue').style.display='block';
+    toast(`Welcome back, ${saved.name}!`,'#00f5ff');
+  }
+
+  // Start the render loop
+  requestAnimationFrame(mainLoop);
+})();
+
+</script>
 
 </body>
 </html>
